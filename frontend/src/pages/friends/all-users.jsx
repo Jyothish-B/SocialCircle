@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAllUsers } from "../../hooks/data/friends/useAllUsers";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import useAuth from "@/hooks/auth/use-auth";
 import {
   InfoIcon,
@@ -20,6 +19,14 @@ import {
 } from "@/components/ui/dialog";
 import { useAddFriend } from "@/hooks/data/friends/useAddFriend";
 import { useRemoveFriend } from "@/hooks/data/friends/useRemoveFriend";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 
 const LoadingState = () => (
   <p className="text-lg text-center">Loading users...</p>
@@ -63,49 +70,6 @@ const UserDetailsDialog = ({ isOpen, onClose, user }) => (
       </div>
     </DialogContent>
   </Dialog>
-);
-
-const UserCard = ({ user, onAdd, onRemove, onDetails, isLoading }) => (
-  <Card className="hover:bg-muted/50 hover:shadow-lg hover:border-primary/20">
-    <CardContent className="p-4 flex justify-between items-center">
-      <h3 className="font-semibold text-primary">@{user.username}</h3>
-      <div className="space-x-2">
-        {user.isFriend ? (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onRemove(user)}
-            disabled={isLoading === user.id}
-          >
-            {isLoading === user.id ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <UserMinus className="h-4 w-4 mr-2" />
-            )}
-            Remove Friend
-          </Button>
-        ) : (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => onAdd(user)}
-            disabled={isLoading === user.id}
-          >
-            {isLoading === user.id ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <UserPlus className="h-4 w-4 mr-2" />
-            )}
-            Add Friend
-          </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={() => onDetails(user)}>
-          <InfoIcon className="h-4 w-4 mr-2" />
-          Details
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
 );
 
 export default function AllUsers() {
@@ -153,22 +117,88 @@ export default function AllUsers() {
   if (!users?.length) return <EmptyState />;
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       <h1 className="text-3xl font-bold mb-6">All Users</h1>
       <p className="text-gray-500 mb-4">Total users: {users.length}</p>
-      <ScrollArea className="h-[400px] rounded-md border p-4">
-        <div className="space-y-4">
-          {users.map((user) => (
-            <UserCard
-              key={user.id}
-              user={user}
-              onAdd={handleAddFriend}
-              onRemove={handleRemoveFriend}
-              onDetails={handleUserDetails}
-              isLoading={loadingUser}
-            />
-          ))}
-        </div>
+      <ScrollArea className="h-[calc(100vh-24rem)] border rounded-md">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="bg-background sticky top-0">
+                User ID
+              </TableHead>
+              <TableHead className="bg-background sticky top-0">
+                Username
+              </TableHead>
+              <TableHead className="bg-background sticky top-0">
+                Status
+              </TableHead>
+              <TableHead className="bg-background sticky top-0 text-right">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.id}</TableCell>
+                <TableCell>@{user.username}</TableCell>
+                <TableCell>
+                  {user.isFriend ? (
+                    <span className="text-green-500 flex items-center gap-1">
+                      <UserCheck className="h-4 w-4" /> Friend
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 flex items-center gap-1">
+                      <UserX2 className="h-4 w-4" /> Not Friend
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="space-x-2">
+                    {user.isFriend ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleRemoveFriend(user)}
+                        disabled={loadingUser === user.id}
+                      >
+                        {loadingUser === user.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <UserMinus className="h-4 w-4 mr-2" />
+                        )}
+                        Remove Friend
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleAddFriend(user)}
+                        disabled={loadingUser === user.id}
+                      >
+                        {loadingUser === user.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        )}
+                        Add Friend
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleUserDetails(user)}
+                    >
+                      <InfoIcon className="h-4 w-4 mr-2" />
+                      Details
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </ScrollArea>
       <UserDetailsDialog
         isOpen={!!selectedUser}

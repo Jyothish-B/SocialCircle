@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAllFriends } from "../../hooks/data/friends/useAllFriends";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+// import { Card, CardContent } from "@/components/ui/card";
 import useAuth from "@/hooks/auth/use-auth";
 import { InfoIcon, UserX, UserCheck, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useRemoveFriend } from "@/hooks/data/friends/useRemoveFriend";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 
 const LoadingState = () => (
   <p className="text-lg text-center">Loading friends...</p>
@@ -50,33 +58,6 @@ const UserDetailsDialog = ({ isOpen, onClose, user }) => (
   </Dialog>
 );
 
-const FriendCard = ({ friend, onRemove, onDetails, isRemoving }) => (
-  <Card className="hover:bg-muted/50 hover:shadow-lg hover:border-primary/20">
-    <CardContent className="p-4 flex justify-between items-center">
-      <h3 className="font-semibold text-primary">@{friend.username}</h3>
-      <div className="space-x-2">
-        <Button variant="outline" size="sm" onClick={() => onDetails(friend)}>
-          <InfoIcon className="h-4 w-4 mr-2" />
-          Details
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => onRemove(friend)}
-          disabled={isRemoving === friend.id}
-        >
-          {isRemoving === friend.id ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <UserX className="h-4 w-4 mr-2" />
-          )}
-          Remove
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
-
 export default function MyFriends() {
   const { user } = useAuth();
   const { data: friends, isLoading, error } = useAllFriends(user.id);
@@ -107,21 +88,58 @@ export default function MyFriends() {
   if (!friends?.length) return <EmptyState />;
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       <h1 className="text-3xl font-bold mb-6">My Friends</h1>
       <p className="text-gray-500 mb-4">Total friends: {friends.length}</p>
-      <ScrollArea className="h-[400px] rounded-md border p-4">
-        <div className="space-y-4">
-          {friends.map((friend) => (
-            <FriendCard
-              key={friend.id}
-              friend={friend}
-              onRemove={handleRemoveFriend}
-              onDetails={handleFriendDetails}
-              isRemoving={removingFriend}
-            />
-          ))}
-        </div>
+      <ScrollArea className="h-[calc(100vh-24rem)] border rounded-md">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="bg-background sticky top-0">
+                User ID
+              </TableHead>
+              <TableHead className="bg-background sticky top-0">
+                Username
+              </TableHead>
+              <TableHead className="bg-background sticky top-0 text-right">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {friends.map((friend) => (
+              <TableRow key={friend.id}>
+                <TableCell>{friend.id}</TableCell>
+                <TableCell>@{friend.username}</TableCell>
+                <TableCell className="text-right">
+                  <div className="space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFriendDetails(friend)}
+                    >
+                      <InfoIcon className="h-4 w-4 mr-2" />
+                      Details
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveFriend(friend)}
+                      disabled={removingFriend === friend.id}
+                    >
+                      {removingFriend === friend.id ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <UserX className="h-4 w-4 mr-2" />
+                      )}
+                      Remove
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </ScrollArea>
       <UserDetailsDialog
         isOpen={!!selectedFriend}
