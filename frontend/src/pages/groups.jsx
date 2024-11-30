@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useAuth from "@/hooks/auth/use-auth";
 import { InfoIcon, LogOut, PlusCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const GroupCard = ({ group, onJoin, onQuit, onDetails, isMember }) => (
   <Card className="hover:shadow-lg hover:border-primary/20 hover:bg-muted/50">
@@ -76,6 +77,9 @@ export default function Groups() {
   if (error) return <ErrorState error={error} />;
   if (!groups?.length) return <EmptyState />;
 
+  const myGroups = groups.filter(group => group.isMember);
+  const allGroups = groups.filter(group => !group.isMember);
+
   return (
     <div className="container">
       <h1 className="text-3xl font-bold mb-6">Groups</h1>
@@ -88,35 +92,57 @@ export default function Groups() {
 
         <TabsContent value="all-groups">
           <ScrollArea className="h-[400px] rounded-md border p-4">
-            <div className="space-y-4">
-              {groups.map((group) => (
-                <GroupCard
-                  key={group.id}
-                  group={group}
-                  onJoin={handleJoinGroup}
-                  onQuit={handleQuitGroup}
-                  onDetails={handleGroupDetails}
-                  isMember={false}
-                />
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allGroups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell>{group.name}</TableCell>
+                    <TableCell>{group.description}</TableCell>
+                    <TableCell>
+                      <Button variant="primary" size="sm" onClick={() => handleJoinGroup(group)}>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Join
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </ScrollArea>
         </TabsContent>
 
         <TabsContent value="my-groups">
           <ScrollArea className="h-[400px] rounded-md border p-4">
-            <div className="space-y-4">
-              {groups.map((group) => (
-                <GroupCard
-                  key={group.id}
-                  group={group}
-                  onJoin={handleJoinGroup}
-                  onQuit={handleQuitGroup}
-                  onDetails={handleGroupDetails}
-                  isMember={true}
-                />
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {myGroups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell>{group.name}</TableCell>
+                    <TableCell>{group.description}</TableCell>
+                    <TableCell>
+                      <Button variant="destructive" size="sm" onClick={() => handleQuitGroup(group)}>
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Quit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </ScrollArea>
         </TabsContent>
 
