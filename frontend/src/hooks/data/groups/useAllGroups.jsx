@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-const getAllGroups = async (userId) => {
-  const { data } = await api.get(`/groups?user_id=${userId}`);
+const getAllGroups = async () => {
+  const { data } = await api.get(`/groups/all`);
   return data;
 };
 
-export const useAllGroups = (userId) => {
+export const useAllGroups = () => {
   return useQuery({
-    queryKey: ["groups", userId],
-    queryFn: () => getAllGroups(userId),
-    enabled: !!userId,
+    queryKey: ["groups"],
+    queryFn: getAllGroups,
   });
 };
