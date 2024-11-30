@@ -20,3 +20,33 @@ export const getGroups = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const joinGroup = async (req, res) => {
+  const { user_id, group_id } = req.body;
+  try {
+    await db.executeQuery(
+      `MATCH (u:User), (g:Group)
+       WHERE id(u) = $user_id AND id(g) = $group_id
+       CREATE (u)-[:MEMBER_OF]->(g)`,
+      { user_id: parseInt(user_id), group_id: parseInt(group_id) }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const quitGroup = async (req, res) => {
+  const { user_id, group_id } = req.body;
+  try {
+    await db.executeQuery(
+      `MATCH (u:User)-[r:MEMBER_OF]->(g:Group)
+       WHERE id(u) = $user_id AND id(g) = $group_id
+       DELETE r`,
+      { user_id: parseInt(user_id), group_id: parseInt(group_id) }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
