@@ -16,6 +16,7 @@ export const useJoinGroup = () => {
     mutationFn: joinGroup,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries(["groups", variables.userId]);
+      queryClient.invalidateQueries(["myGroups", variables.userId]);
     },
   });
 };

@@ -32,7 +32,9 @@ export const joinGroup = async (req, res) => {
     );
 
     if (existingMembership.length > 0) {
-      return res.status(400).json({ error: "User is already a member of this group" });
+      return res
+        .status(400)
+        .json({ error: "User is already a member of this group" });
     }
 
     await db.executeQuery(
@@ -63,17 +65,91 @@ export const quitGroup = async (req, res) => {
 };
 
 export const getAllGroups = async (req, res) => {
+  const { user_id } = req.query;
   try {
     const result = await db.executeQuery(
       `MATCH (g:Group)
-       RETURN id(g) as id, g.name as name, g.description as description`
+       OPTIONAL MATCH (u:User)-[r:MEMBER_OF]->(g)
+       WHERE id(u) = $user_id
+       WITH g, r IS NOT NULL as isMember
+       MATCH (member:User)-[:MEMBER_OF]->(g)
+       RETURN id(g) as id, g.name as name, g.description as description, 
+              isMember, collect({id: id(member), username: member.username}) as members`,
+      { user_id: parseInt(user_id) }
     );
     res.json(
       result?.map((record) => ({
         id: record._fields[0].low,
         name: record._fields[1],
         description: record._fields[2],
+        isMember: record._fields[3],
+        members: record._fields[4].map((m) => ({
+          id: m.id.low,
+          username: m.username,
+        })),
       })) || []
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getMyGroups = async (req, res) => {
+  const { user_id } = req.query;
+  try {
+    const result = await db.executeQuery(
+      `MATCH (u:User)-[:MEMBER_OF]->(g:Group)
+       WHERE id(u) = $user_id
+       WITH g
+       MATCH (member:User)-[:MEMBER_OF]->(g)
+       RETURN id(g) as id, g.name as name, g.description as description, 
+              true as isMember, collect({id: id(member), username: member.username}) as members`,
+      { user_id: parseInt(user_id) }
+    );
+    res.json(
+      result?.map((record) => ({
+        id: record._fields[0].low,
+        name: record._fields[1],
+        description: record._fields[2],
+        isMember: record._fields[3],
+        members: record._fields[4].map((m) => ({
+          id: m.id.low,
+          username: m.username,
+        })),
+      })) || []
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getSuggestedGroups = async (req, res) => {
+  const { user_id } = req.query;
+  try {
+    const result = await db.executeQuery(
+      `
+      MATCH (u:User) WHERE id(u) = $user_id
+      MATCH (u)-[:FRIENDS_WITH]->(friend)-[:MEMBER_OF]->(g:Group)
+      WHERE NOT (u)-[:MEMBER_OF]->(g)
+      WITH DISTINCT g
+      MATCH (member:User)-[:MEMBER_OF]->(g)
+      RETURN id(g) as id, g.name as name, g.description as description, 
+             false as isMember, collect({id: id(member), username: member.username}) as members
+      LIMIT 10
+      `,
+      { user_id: parseInt(user_id) }
+    );
+    res.json(
+      result.map((record) => ({
+        id: record._fields[0].low,
+        name: record._fields[1],
+        description: record._fields[2],
+        isMember: record._fields[3],
+        members: record._fields[4].map((m) => ({
+          id: m.id.low,
+          username: m.username,
+        })),
+      }))
     );
   } catch (error) {
     res.status(500).json({ error: error.message });

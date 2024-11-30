@@ -72,3 +72,27 @@ export const addFriend = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const getSuggestedFriends = async (req, res) => {
+  const { user_id } = req.query;
+  try {
+    const result = await db.executeQuery(
+      `
+      MATCH (u:User) WHERE id(u) = $user_id
+      MATCH (u)-[:FRIENDS_WITH]->(friend)-[:FRIENDS_WITH]->(suggested:User)
+      WHERE NOT (u)-[:FRIENDS_WITH]->(suggested) AND id(u) <> id(suggested)
+      RETURN DISTINCT id(suggested) as id, suggested.username as username
+      LIMIT 10
+      `,
+      { user_id: parseInt(user_id) }
+    );
+    res.json(
+      result.map((record) => ({
+        id: record._fields[0].low,
+        username: record._fields[1],
+      }))
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

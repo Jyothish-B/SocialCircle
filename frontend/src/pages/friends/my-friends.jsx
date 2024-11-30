@@ -118,7 +118,7 @@ export default function MyFriends() {
                       size="sm"
                       onClick={() => handleFriendDetails(friend)}
                     >
-                      <InfoIcon className="h-4 w-4 mr-2" />
+                      <InfoIcon className="h-4 w-4" />
                       Details
                     </Button>
                     <Button
@@ -128,9 +128,9 @@ export default function MyFriends() {
                       disabled={removingFriend === friend.id}
                     >
                       {removingFriend === friend.id ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <UserX className="h-4 w-4 mr-2" />
+                        <UserX className="h-4 w-4" />
                       )}
                       Remove
                     </Button>

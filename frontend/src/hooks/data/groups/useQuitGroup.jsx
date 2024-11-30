@@ -18,6 +18,7 @@ export const useQuitGroup = () => {
     mutationFn: quitGroup,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries(["groups", variables.userId]);
+      queryClient.invalidateQueries(["myGroups", variables.userId]);
     },
   });
 };

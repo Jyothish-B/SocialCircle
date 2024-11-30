@@ -34,7 +34,7 @@ export default function Login() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="eg. Mennados PEDADA"
+              placeholder=""
               required
             />
             <Button type="submit" className="w-full">

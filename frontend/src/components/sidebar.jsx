@@ -4,10 +4,15 @@ import { Link, useLocation } from "react-router-dom";
 
 const links = [
   {
-    title: "Home",
+    title: "Profile",
     url: "/",
-    icon: Home,
+    icon: User,
   },
+  // {
+  //   title: "Home",
+  //   url: "/",
+  //   icon: Home,
+  // },
   {
     title: "Friends",
     url: "/friends",
@@ -17,11 +22,6 @@ const links = [
     title: "Groups",
     url: "/groups",
     icon: Users,
-  },
-  {
-    title: "Profile",
-    url: "/profile",
-    icon: User,
   },
 ];
 

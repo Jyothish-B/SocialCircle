@@ -1,157 +1,65 @@
 import { useAllGroups } from "../hooks/data/groups/useAllGroups";
+import { useMyGroups } from "../hooks/data/groups/useMyGroups";
 import { useJoinGroup } from "../hooks/data/groups/useJoinGroup";
 import { useQuitGroup } from "../hooks/data/groups/useQuitGroup";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { useRecommendGroups } from "../hooks/data/groups/useRecommendGroups";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useAuth from "@/hooks/auth/use-auth";
-import { InfoIcon, LogOut, PlusCircle } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-const GroupCard = ({ group, onJoin, onQuit, onDetails, isMember }) => (
-  <Card className="hover:shadow-lg hover:border-primary/20 hover:bg-muted/50">
-    <CardContent className="p-4">
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <h3 className="font-semibold text-lg text-primary">{group.name}</h3>
-          <p className="text-sm text-muted-foreground">{group.description}</p>
-        </div>
-        <div className="space-x-2">
-          <Button variant="outline" size="sm" onClick={() => onDetails(group)}>
-            <InfoIcon className="h-4 w-4 mr-2" />
-            Details
-          </Button>
-          {isMember ? (
-            <Button variant="destructive" size="sm" onClick={() => onQuit(group)}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Quit
-            </Button>
-          ) : (
-            <Button variant="primary" size="sm" onClick={() => onJoin(group)}>
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Join
-            </Button>
-          )}
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-);
-
-const LoadingState = () => (
-  <p className="text-lg text-center">Loading groups...</p>
-);
-
-const ErrorState = ({ error }) => (
-  <p className="text-lg text-center text-destructive">Error: {error.message}</p>
-);
-
-const EmptyState = () => (
-  <p className="text-lg text-center">
-    You&apos;re not a member of any groups yet. Join or create a group to get
-    started!
-  </p>
-);
+import { GroupsTable } from "@/components/groups/GroupsTable";
+import { LoadingState } from "@/components/groups/StateComponents";
 
 export default function Groups() {
   const { user } = useAuth();
-  const { data: groups, isLoading, error } = useAllGroups(user.id);
+  const { data: allGroups, isLoading: isLoadingAll } = useAllGroups(user?.id);
+  const { data: myGroups, isLoading: isLoadingMy } = useMyGroups(user?.id);
+  const { data: recommendedGroups, isLoading: isLoadingRecommended } =
+    useRecommendGroups(user?.id);
   const joinGroup = useJoinGroup();
   const quitGroup = useQuitGroup();
 
-  const handleJoinGroup = (group) => {
-    joinGroup.mutate({ userId: user.id, groupId: group.id });
+  const handleJoinGroup = async (group) => {
+    await joinGroup.mutateAsync({ userId: user.id, groupId: group.id });
   };
 
-  const handleQuitGroup = (group) => {
-    quitGroup.mutate({ userId: user.id, groupId: group.id });
+  const handleQuitGroup = async (group) => {
+    await quitGroup.mutateAsync({ userId: user.id, groupId: group.id });
   };
 
-  const handleGroupDetails = (group) => {
-    // TODO: Implement show group details functionality
-    console.log("Show details for:", group);
-  };
-
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState error={error} />;
-  if (!groups?.length) return <EmptyState />;
-
-  const myGroups = groups.filter(group => group.isMember);
-  const allGroups = groups.filter(group => !group.isMember);
+  if (isLoadingAll || isLoadingMy || isLoadingRecommended)
+    return <LoadingState />;
 
   return (
     <div className="container">
       <h1 className="text-3xl font-bold mb-6">Groups</h1>
       <Tabs defaultValue="my-groups">
-        <TabsList className="w-full bg-azeaze gap-3 h-12 mb-6">
+        <TabsList className="w-full gap-3 h-12 mb-6">
           <TabsTrigger value="all-groups">All Groups</TabsTrigger>
           <TabsTrigger value="my-groups">My Groups</TabsTrigger>
-          <TabsTrigger value="suggest-groups">Suggest Groups</TabsTrigger>
+          <TabsTrigger value="suggested-groups">Suggested Groups</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all-groups">
-          <ScrollArea className="h-[400px] rounded-md border p-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allGroups.map((group) => (
-                  <TableRow key={group.id}>
-                    <TableCell>{group.name}</TableCell>
-                    <TableCell>{group.description}</TableCell>
-                    <TableCell>
-                      <Button variant="primary" size="sm" onClick={() => handleJoinGroup(group)}>
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Join
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
+          <GroupsTable
+            groups={allGroups}
+            onJoin={handleJoinGroup}
+            onQuit={handleQuitGroup}
+          />
         </TabsContent>
 
         <TabsContent value="my-groups">
-          <ScrollArea className="h-[400px] rounded-md border p-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {myGroups.map((group) => (
-                  <TableRow key={group.id}>
-                    <TableCell>{group.name}</TableCell>
-                    <TableCell>{group.description}</TableCell>
-                    <TableCell>
-                      <Button variant="destructive" size="sm" onClick={() => handleQuitGroup(group)}>
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Quit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
+          <GroupsTable
+            groups={myGroups}
+            onJoin={handleJoinGroup}
+            onQuit={handleQuitGroup}
+          />
         </TabsContent>
 
-        <TabsContent value="suggest-groups">
-          <ScrollArea className="h-[400px] rounded-md border p-4">
-            <div className="space-y-4">
-              {/* TODO: Implement suggested groups functionality */}
-            </div>
-          </ScrollArea>
+        <TabsContent value="suggested-groups">
+          <GroupsTable
+            groups={recommendedGroups}
+            onJoin={handleJoinGroup}
+            onQuit={handleQuitGroup}
+          />
         </TabsContent>
       </Tabs>
     </div>

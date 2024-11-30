@@ -39,14 +39,14 @@ function App() {
               </PublicRoute>
             }
           />
-          <Route
+          {/* <Route
             path="/"
             element={
               <ProtectedRoute>
                 <Home />
               </ProtectedRoute>
             }
-          />
+          /> */}
           <Route
             path="/friends"
             element={
@@ -64,7 +64,7 @@ function App() {
             }
           />
           <Route
-            path="/profile"
+            path="/"
             element={
               <ProtectedRoute>
                 <Profile />

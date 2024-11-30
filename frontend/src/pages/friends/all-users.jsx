@@ -2,14 +2,7 @@ import { useState } from "react";
 import { useAllUsers } from "../../hooks/data/friends/useAllUsers";
 import { Button } from "@/components/ui/button";
 import useAuth from "@/hooks/auth/use-auth";
-import {
-  InfoIcon,
-  UserPlus,
-  UserMinus,
-  UserCheck,
-  UserX2,
-  Loader2,
-} from "lucide-react";
+import { InfoIcon, UserPlus, UserCheck, UserX, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -51,7 +44,7 @@ const UserDetailsDialog = ({ isOpen, onClose, user }) => (
             </>
           ) : (
             <>
-              <UserX2 className="h-5 w-5 text-gray-400" />
+              <UserX className="h-5 w-5 text-gray-400" />
               <span className="text-sm font-normal text-gray-400">
                 Not Friend
               </span>
@@ -150,7 +143,7 @@ export default function AllUsers() {
                     </span>
                   ) : (
                     <span className="text-gray-500 flex items-center gap-1">
-                      <UserX2 className="h-4 w-4" /> Not Friend
+                      <UserX className="h-4 w-4" /> Not Friend
                     </span>
                   )}
                 </TableCell>
@@ -164,9 +157,9 @@ export default function AllUsers() {
                         disabled={loadingUser === user.id}
                       >
                         {loadingUser === user.id ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <UserMinus className="h-4 w-4 mr-2" />
+                          <UserX className="h-4 w-4" />
                         )}
                         Remove Friend
                       </Button>
@@ -178,9 +171,9 @@ export default function AllUsers() {
                         disabled={loadingUser === user.id}
                       >
                         {loadingUser === user.id ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <UserPlus className="h-4 w-4 mr-2" />
+                          <UserPlus className="h-4 w-4" />
                         )}
                         Add Friend
                       </Button>
@@ -190,7 +183,7 @@ export default function AllUsers() {
                       size="sm"
                       onClick={() => handleUserDetails(user)}
                     >
-                      <InfoIcon className="h-4 w-4 mr-2" />
+                      <InfoIcon className="h-4 w-4" />
                       Details
                     </Button>
                   </div>
