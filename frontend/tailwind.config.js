@@ -1,9 +1,15 @@
+import tailwindanimate from "tailwindcss-animate";
 /** @type {import('tailwindcss').Config} */
 export default {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['Poppins', 'sans-serif'],
+  			poppins: ['Poppins', 'sans-serif'],
+  			fira: ['Fira Code', 'monospace'],
+  		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
@@ -85,5 +91,5 @@ export default {
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindanimate],
 };
