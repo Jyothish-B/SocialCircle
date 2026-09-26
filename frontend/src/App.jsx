@@ -11,14 +11,14 @@ import Profile from "@/pages/profile";
 import Test from "@/pages/test";
 import Explorer from "@/pages/explorer";
 import useAuth from "@/hooks/auth/use-auth";
-// import Layout from "./layouts/layout";
+import Layout from "./layouts/layout";
 
 // eslint-disable-next-line react/prop-types
-// function ProtectedRoute({ children }) {
-//   const { isAuthenticated } = useAuth();
-//   if (!isAuthenticated) return <Navigate to="/login" />;
-//   return children;
-// }
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  return children;
+}
 
 // eslint-disable-next-line react/prop-types
 function PublicRoute({ children }) {
@@ -41,12 +41,13 @@ function App() {
         />
         <Route
           path="/"
-          // element={
-          //   <ProtectedRoute>
-          //     <Layout />
-          //   </ProtectedRoute>
-          // }
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
         >
+          <Route index element={<Navigate to="friends" replace />} />
           <Route path="friends" element={<Friends />} />
           <Route path="groups" element={<Groups />} />
           <Route path="profile" element={<Profile />} />
