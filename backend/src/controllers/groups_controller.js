@@ -74,7 +74,8 @@ export const getAllGroups = async (req, res) => {
        WITH g, r IS NOT NULL as isMember
        MATCH (member:User)-[:MEMBER_OF]->(g)
        RETURN id(g) as id, g.name as name, g.description as description, 
-              isMember, collect({id: id(member), username: member.username}) as members`,
+              isMember, collect({id: id(member), username: member.username})[..8] as members,
+             count(member) as memberCount`,
       { user_id: parseInt(user_id) }
     );
     res.json(
@@ -87,6 +88,7 @@ export const getAllGroups = async (req, res) => {
           id: m.id.low,
           username: m.username,
         })),
+        memberCount: record._fields[5].toNumber(),
       })) || []
     );
   } catch (error) {
@@ -103,7 +105,8 @@ export const getMyGroups = async (req, res) => {
        WITH g
        MATCH (member:User)-[:MEMBER_OF]->(g)
        RETURN id(g) as id, g.name as name, g.description as description, 
-              true as isMember, collect({id: id(member), username: member.username}) as members`,
+              true as isMember, collect({id: id(member), username: member.username})[..8] as members,
+             count(member) as memberCount`,
       { user_id: parseInt(user_id) }
     );
     res.json(
@@ -116,6 +119,7 @@ export const getMyGroups = async (req, res) => {
           id: m.id.low,
           username: m.username,
         })),
+        memberCount: record._fields[5].toNumber(),
       })) || []
     );
   } catch (error) {
@@ -134,7 +138,8 @@ export const getSuggestedGroups = async (req, res) => {
       WITH DISTINCT g
       MATCH (member:User)-[:MEMBER_OF]->(g)
       RETURN id(g) as id, g.name as name, g.description as description, 
-             false as isMember, collect({id: id(member), username: member.username}) as members
+             false as isMember, collect({id: id(member), username: member.username})[..8] as members,
+             count(member) as memberCount
       LIMIT 10
       `,
       { user_id: parseInt(user_id) }
@@ -149,6 +154,7 @@ export const getSuggestedGroups = async (req, res) => {
           id: m.id.low,
           username: m.username,
         })),
+        memberCount: record._fields[5].toNumber(),
       }))
     );
   } catch (error) {

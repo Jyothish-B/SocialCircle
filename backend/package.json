@@ -7,7 +7,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon -r dotenv/config index.js",
-    "seed": "node src/utils/seeder.js"
+    "seed": "node src/utils/seeder.js",
+    "adapt": "node src/utils/adapt_csv_data.js",
+    "grow": "node src/utils/grow_network.js"
   },
   "keywords": [],
   "author": "",

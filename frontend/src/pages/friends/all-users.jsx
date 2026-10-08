@@ -2,202 +2,139 @@ import { useState } from "react";
 import { useAllUsers } from "../../hooks/data/friends/useAllUsers";
 import { Button } from "@/components/ui/button";
 import useAuth from "@/hooks/auth/use-auth";
-import { InfoIcon, UserPlus, UserCheck, UserX, Loader2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { UserPlus, UserCheck, UserX, Loader2, Search, Users2 } from "lucide-react";
 import { useAddFriend } from "@/hooks/data/friends/useAddFriend";
 import { useRemoveFriend } from "@/hooks/data/friends/useRemoveFriend";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 
-const LoadingState = () => (
-  <p className="text-lg text-center">Loading users...</p>
-);
+function getInitials(username) {
+  if (!username) return "?";
+  return username.slice(0, 2).toUpperCase();
+}
 
-const ErrorState = ({ error }) => (
-  <p className="text-lg text-center text-destructive">Error: {error.message}</p>
-);
-
-const EmptyState = () => <p className="text-lg text-center">No users found.</p>;
-
-const UserDetailsDialog = ({ isOpen, onClose, user }) => (
-  <Dialog open={isOpen} onOpenChange={onClose}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          User Details
-          {user?.isFriend ? (
-            <>
-              <UserCheck className="h-5 w-5 text-green-500" />
-              <span className="text-sm font-normal text-green-500">Friend</span>
-            </>
-          ) : (
-            <>
-              <UserX className="h-5 w-5 text-gray-400" />
-              <span className="text-sm font-normal text-gray-400">
-                Not Friend
-              </span>
-            </>
-          )}
-        </DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <p>
-          <strong>Username:</strong> @{user?.username}
-        </p>
-        <p>
-          <strong>User ID:</strong> {user?.id}
-        </p>
-        {/* Add more user details as needed */}
+function UserCard({ user, onAdd, onRemove, loadingUser }) {
+  const isLoading = loadingUser === user.id;
+  return (
+    <div className="glass rounded-2xl p-5 flex flex-col gap-4 hover:scale-[1.02] transition-all duration-200 hover:shadow-2xl hover:shadow-primary/10">
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-base shrink-0">
+          {getInitials(user.username)}
+        </div>
+        <div className="overflow-hidden">
+          <p className="font-semibold text-sm truncate">@{user.username}</p>
+          <p className="text-xs text-muted-foreground">User ID: {user.id?.slice(0, 8)}...</p>
+        </div>
+        {user.isFriend && (
+          <span className="ml-auto flex items-center gap-1 text-xs text-green-500 bg-green-500/10 px-2 py-1 rounded-full">
+            <UserCheck className="h-3 w-3" /> Friend
+          </span>
+        )}
       </div>
-    </DialogContent>
-  </Dialog>
-);
+      <div className="flex gap-2 mt-auto">
+        {user.isFriend ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+            onClick={() => onRemove(user)}
+            disabled={isLoading}
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4 mr-1" />}
+            Remove
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="flex-1"
+            onClick={() => onAdd(user)}
+            disabled={isLoading}
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4 mr-1" />}
+            Add Friend
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AllUsers() {
   const { user } = useAuth();
   const { data: users, isLoading, error } = useAllUsers(user.id);
-  const [selectedUser, setSelectedUser] = useState(null);
   const addFriendMutation = useAddFriend();
   const removeFriendMutation = useRemoveFriend();
   const [loadingUser, setLoadingUser] = useState(null);
+  const [search, setSearch] = useState("");
 
   const handleAddFriend = async (friend) => {
     try {
       setLoadingUser(friend.id);
-      await addFriendMutation.mutateAsync({
-        userId: user.id,
-        friendId: friend.id,
-      });
-    } catch (error) {
-      console.error("Failed to add friend:", error);
-    } finally {
-      setLoadingUser(null);
-    }
-  };
-
-  const handleUserDetails = (user) => {
-    setSelectedUser(user);
+      await addFriendMutation.mutateAsync({ userId: user.id, friendId: friend.id });
+    } catch (e) { console.error(e); }
+    finally { setLoadingUser(null); }
   };
 
   const handleRemoveFriend = async (friend) => {
     try {
       setLoadingUser(friend.id);
-      await removeFriendMutation.mutateAsync({
-        userId: user.id,
-        friendId: friend.id,
-      });
-    } catch (error) {
-      console.error("Failed to remove friend:", error);
-    } finally {
-      setLoadingUser(null);
-    }
+      await removeFriendMutation.mutateAsync({ userId: user.id, friendId: friend.id });
+    } catch (e) { console.error(e); }
+    finally { setLoadingUser(null); }
   };
 
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState error={error} />;
-  if (!users?.length) return <EmptyState />;
+  const filtered = users?.filter(u =>
+    u.username.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (isLoading) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-4">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <p className="text-muted-foreground">Loading users...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex items-center justify-center h-64 text-destructive gap-2">
+      <p>Error: {error.message}</p>
+    </div>
+  );
 
   return (
-    <div className="h-full flex flex-col">
-      <h1 className="text-3xl font-bold mb-6">All Users</h1>
-      <p className="text-gray-500 mb-4">Total users: {users.length}</p>
-      <ScrollArea className="h-[calc(100vh-24rem)] border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="bg-background sticky top-0">
-                User ID
-              </TableHead>
-              <TableHead className="bg-background sticky top-0">
-                Username
-              </TableHead>
-              <TableHead className="bg-background sticky top-0">
-                Status
-              </TableHead>
-              <TableHead className="bg-background sticky top-0 text-right">
-                Actions
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.id}</TableCell>
-                <TableCell>@{user.username}</TableCell>
-                <TableCell>
-                  {user.isFriend ? (
-                    <span className="text-green-500 flex items-center gap-1">
-                      <UserCheck className="h-4 w-4" /> Friend
-                    </span>
-                  ) : (
-                    <span className="text-gray-500 flex items-center gap-1">
-                      <UserX className="h-4 w-4" /> Not Friend
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="space-x-2">
-                    {user.isFriend ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleRemoveFriend(user)}
-                        disabled={loadingUser === user.id}
-                      >
-                        {loadingUser === user.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserX className="h-4 w-4" />
-                        )}
-                        Remove Friend
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleAddFriend(user)}
-                        disabled={loadingUser === user.id}
-                      >
-                        {loadingUser === user.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserPlus className="h-4 w-4" />
-                        )}
-                        Add Friend
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleUserDetails(user)}
-                    >
-                      <InfoIcon className="h-4 w-4" />
-                      Details
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollArea>
-      <UserDetailsDialog
-        isOpen={!!selectedUser}
-        onClose={() => setSelectedUser(null)}
-        user={selectedUser}
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-heading font-bold">All Users</h2>
+          <p className="text-muted-foreground text-sm">{users?.length} people on Social Circle</p>
+        </div>
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search users..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 bg-background/50"
+          />
+        </div>
+      </div>
+
+      {!filtered?.length ? (
+        <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
+          <Users2 className="h-12 w-12 opacity-30" />
+          <p>No users found.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filtered.map((u) => (
+            <UserCard
+              key={u.id}
+              user={u}
+              onAdd={handleAddFriend}
+              onRemove={handleRemoveFriend}
+              loadingUser={loadingUser}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

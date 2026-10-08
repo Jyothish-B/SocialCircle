@@ -8,19 +8,19 @@ export const login = async (req, res) => {
   }
 
   try {
-    // Try to find existing user
-    let records = await db.executeQuery(
-      "MATCH (u:User {username: $username}) RETURN u",
+    // Find or create the user; every login refreshes lastActiveAt, which
+    // feeds the recency factor of the recommender
+    const records = await db.executeQuery(
+      // user_id is a NODE KEY from the CSV import, so new accounts need it too.
+      // The id is generated once: inside one SET, u.userId would still read null.
+      `WITH randomUUID() AS newId
+       MERGE (u:User {username: $username})
+       ON CREATE SET u.userId = newId, u.user_id = newId, u.name = $username,
+                     u.joinedAt = datetime(), u.isActive = true
+       SET u.lastActiveAt = datetime()
+       RETURN u`,
       { username }
     );
-
-    if (records.length === 0) {
-      // Create new user if not found
-      records = await db.executeQuery(
-        "CREATE (u:User {username: $username}) RETURN u",
-        { username }
-      );
-    }
 
     const user = records[0].get("u").properties;
     const userId = records[0].get("u").identity.toString();

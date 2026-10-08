@@ -10,6 +10,8 @@ import Groups from "@/pages/groups";
 import Profile from "@/pages/profile";
 import Test from "@/pages/test";
 import Explorer from "@/pages/explorer";
+import People from "@/pages/people";
+import Person from "@/pages/person";
 import useAuth from "@/hooks/auth/use-auth";
 import Layout from "./layouts/layout";
 
@@ -53,6 +55,8 @@ function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="test" element={<Test />} />
           <Route path="explorer" element={<Explorer />} />
+          <Route path="people" element={<People />} />
+          <Route path="people/:id" element={<Person />} />
         </Route>
       </Routes>
     </Router>

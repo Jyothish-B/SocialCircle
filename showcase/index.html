@@ -1,0 +1,1297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Friend Graph Recommender</title>
+<meta name="description" content="Interactive showcase of a Neo4j multi-factor friend recommendation engine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an instrument beside a live network. Graph left, ranked readout right, the reasoning underneath. */
+:root {
+  --bg: #f2f4f0;
+  --panel: #fbfcfa;
+  --panel-2: #eef1ec;
+  --ink: #141815;
+  --ink-2: #4b524d;
+  --ink-3: #6b726d;
+  --line: #dadfd8;
+  --line-2: #c3c9c1;
+  --accent: #1d4a43;
+  --accent-ink: #f2f4f0;
+  --accent-soft: #dde9e5;
+  --hull: #e3e8e1;
+  --edge: #a9b0a8;
+  --node: #fbfcfa;
+  /* score factors: validated categorical order (dataviz reference), colour follows the factor */
+  --f-structural: #2a78d6;
+  --f-interest: #eb6834;
+  --f-community: #1baf7a;
+  --f-geo: #eda100;
+  --f-recency: #e87ba4;
+
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --t-quick: 140ms;
+  --t-std: 260ms;
+  --t-slow: 420ms;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1311; --panel: #171b19; --panel-2: #1d2220; --ink: #ecf0ea; --ink-2: #b4bbb5; --ink-3: #8f9791;
+    --line: #2a302d; --line-2: #3a413d; --accent: #8fd1c1; --accent-ink: #0f1311; --accent-soft: #1f3330;
+    --hull: #1c2321; --edge: #4d5550; --node: #171b19;
+    --f-structural: #3987e5; --f-interest: #d95926; --f-community: #199e70; --f-geo: #c98500; --f-recency: #d55181;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1311; --panel: #171b19; --panel-2: #1d2220; --ink: #ecf0ea; --ink-2: #b4bbb5; --ink-3: #8f9791;
+  --line: #2a302d; --line-2: #3a413d; --accent: #8fd1c1; --accent-ink: #0f1311; --accent-soft: #1f3330;
+  --hull: #1c2321; --edge: #4d5550; --node: #171b19;
+  --f-structural: #3987e5; --f-interest: #d95926; --f-community: #199e70; --f-geo: #c98500; --f-recency: #d55181;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 15px/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; margin: 0; color: var(--ink); }
+h1 { font-size: clamp(2rem, 1.3rem + 2.8vw, 3.4rem); line-height: 1.04; font-weight: 750; }
+h2 { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.1rem); line-height: 1.12; }
+h3 { font-size: 1.1rem; line-height: 1.3; letter-spacing: -0.01em; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+.num { font-variant-numeric: tabular-nums; }
+.label { font: 500 0.72rem/1.2 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.muted { color: var(--ink-2); }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: max(16px, 3vw); }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 24px; min-height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 700 1.05rem/1 var(--font-display); color: var(--ink); text-decoration: none; white-space: nowrap; }
+.brand svg { flex: none; }
+.nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin-left: auto; min-width: 0; }
+.nav::-webkit-scrollbar { display: none; }
+.nav a {
+  color: var(--ink-2); text-decoration: none; font-size: 0.88rem; font-weight: 500;
+  padding: 6px 10px; border-radius: 999px; white-space: nowrap;
+  transition: background var(--t-quick) var(--ease), color var(--t-quick) var(--ease);
+}
+.nav a:hover { background: var(--panel-2); color: var(--ink); }
+
+/* ---------- hero / demo ---------- */
+.hero { padding-block: 40px 24px; display: grid; gap: 12px; }
+.hero h1 .who { color: var(--accent); display: inline-block; transition: opacity var(--t-std) var(--ease), transform var(--t-std) var(--ease); }
+.hero h1 .who.swap { opacity: 0; transform: translateY(6px); }
+.hero p { max-width: 60ch; color: var(--ink-2); font-size: 1.05rem; }
+
+.demo { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; padding-bottom: 56px; align-items: start; }
+@media (max-width: 920px) { .demo { grid-template-columns: minmax(0, 1fr); } .demo > .stack { display: contents; } .weights-panel { order: 3; } }
+.stack { display: grid; gap: 20px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.panel-body { padding: 16px; }
+
+/* graph */
+.graph-wrap { position: relative; }
+#graph { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+#graph .hull { fill: var(--hull); stroke: var(--hull); stroke-linejoin: round; stroke-linecap: round; opacity: 0; transition: opacity var(--t-slow) var(--ease); }
+#graph.gds .hull { opacity: 1; }
+#graph .hull-label { font: 500 10px var(--font-mono); fill: var(--ink-3); opacity: 0; transition: opacity var(--t-slow) var(--ease); }
+#graph.gds .hull-label { opacity: 1; }
+#graph .edge { stroke: var(--edge); transition: stroke var(--t-std) var(--ease), opacity var(--t-std) var(--ease); }
+#graph .edge.mine { stroke: var(--accent); }
+#graph .edge.path { stroke: var(--accent); opacity: 1 !important; }
+#graph .edge.new { stroke-dasharray: 200; animation: draw 700ms var(--ease-out) both; }
+@keyframes draw { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 0; } }
+#graph .suggest { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 5; fill: none; opacity: 0.7; transition: opacity var(--t-std) var(--ease); }
+#graph .node { cursor: pointer; }
+#graph .node circle { fill: var(--node); stroke: var(--line-2); stroke-width: 1.5; transition: fill var(--t-std) var(--ease), stroke var(--t-std) var(--ease), transform var(--t-quick) var(--ease); transform-box: fill-box; transform-origin: center; }
+#graph .node text { font: 500 11px var(--font-body); fill: var(--ink-2); text-anchor: middle; pointer-events: none; transition: fill var(--t-std) var(--ease); }
+#graph .node .initial { font: 600 10px var(--font-mono); fill: var(--ink-2); dominant-baseline: central; }
+#graph .node:hover circle, #graph .node:focus-visible circle { transform: scale(1.12); }
+#graph .node:focus-visible { outline: none; }
+#graph .node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
+#graph .node.friend circle { stroke: var(--accent); stroke-width: 2.5; }
+#graph .node.me circle { fill: var(--accent); stroke: var(--accent); }
+#graph .node.me .initial { fill: var(--accent-ink); }
+#graph .node.me text:not(.initial) { fill: var(--ink); font-weight: 600; }
+#graph .node.rec circle { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 3; }
+#graph .node.dim { opacity: 0.45; }
+#graph .node.focus circle { stroke: var(--accent); stroke-width: 3; stroke-dasharray: none; }
+#graph .rank { font: 600 9px var(--font-mono); fill: var(--accent-ink); dominant-baseline: central; text-anchor: middle; }
+#graph .rank-dot { fill: var(--accent); }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px 14px; font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--line); }
+.graph-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line-2); background: var(--node); flex: none; }
+.key.me { background: var(--accent); border-color: var(--accent); }
+.key.friend { border: 2.5px solid var(--accent); }
+.key.rec { border: 1.5px dashed var(--ink); }
+.key.hull { border-radius: 3px; background: var(--hull); border-color: var(--hull); }
+
+/* controls */
+.field { display: grid; gap: 6px; }
+select, button { font: inherit; color: inherit; }
+select {
+  appearance: none; -webkit-appearance: none; width: 100%;
+  background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%23808880' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 12px center;
+  border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 9px 36px 9px 12px; font-weight: 500;
+}
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: var(--ink-2); }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { width: 34px; height: 20px; border-radius: 999px; background: var(--line-2); position: relative; flex: none; transition: background var(--t-quick) var(--ease); }
+.switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: transform var(--t-std) var(--ease); }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(14px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+  border: 1px solid var(--line-2); background: var(--panel); border-radius: var(--radius-sm);
+  padding: 6px 12px; font-size: 0.84rem; font-weight: 500; cursor: pointer;
+  transition: background var(--t-quick) var(--ease), border-color var(--t-quick) var(--ease), transform var(--t-quick) var(--ease);
+}
+.btn:hover { background: var(--panel-2); border-color: var(--ink-3); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+.btn[hidden] { display: none !important; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.pill.cold { background: color-mix(in srgb, var(--f-geo) 18%, var(--panel)); color: var(--ink); }
+
+/* weights */
+.weights { display: grid; gap: 12px; }
+.weight { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; align-items: center; gap: 12px; font-size: 0.86rem; }
+.weight label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
+.weight output { text-align: right; color: var(--ink-2); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+
+/* readout */
+.readout-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.76rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.results { list-style: none; margin: 0; padding: 0; }
+.result { border-top: 1px solid var(--line); padding: 12px 16px; display: grid; gap: 8px; }
+.result:first-child { border-top: 0; }
+.result.hot { background: var(--panel-2); }
+.r-top { display: grid; grid-template-columns: 22px 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.r-rank { font: 500 0.8rem var(--font-mono); color: var(--ink-3); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; font: 600 0.78rem var(--font-mono); color: var(--ink-2); }
+.r-name { min-width: 0; }
+.r-name b { font-weight: 600; }
+.r-name small { color: var(--ink-3); font-size: 0.8rem; margin-left: 6px; }
+.r-reason { display: block; font-size: 0.82rem; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-score { font: 700 1.5rem/1 var(--font-display); letter-spacing: -0.02em; text-align: right; }
+.r-score small { font: 500 0.7rem var(--font-body); color: var(--ink-3); letter-spacing: 0; margin-left: 1px; }
+.bar { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--panel-2); }
+.bar i { display: block; height: 100%; flex: none; transition: width var(--t-std) var(--ease); }
+.bar i:last-child { border-radius: 0 4px 4px 0; }
+.r-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.why { font-size: 0.84rem; }
+.why table { width: 100%; border-collapse: collapse; }
+.why th, .why td { text-align: left; padding: 6px 8px 6px 0; vertical-align: top; }
+.why th { font-weight: 500; color: var(--ink-3); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.why td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.why tr + tr td { border-top: 1px dashed var(--line); }
+.why tfoot td { font-weight: 600; border-top: 1px solid var(--line-2) !important; }
+.why .ev { color: var(--ink-2); }
+.table-scroll { overflow-x: auto; }
+.note { padding: 12px 16px; border-top: 1px solid var(--line); font-size: 0.82rem; color: var(--ink-2); }
+.empty { padding: 28px 16px; color: var(--ink-2); text-align: center; }
+
+/* ---------- long-form sections ---------- */
+section.block { padding-block: 64px; border-top: 1px solid var(--line); }
+.block-head { display: grid; gap: 10px; margin-bottom: 28px; max-width: 70ch; }
+.block-head p { color: var(--ink-2); }
+
+.formula {
+  font: 500 clamp(0.82rem, 0.7rem + 0.5vw, 1.02rem)/1.9 var(--font-mono);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px; overflow-x: auto; white-space: pre; color: var(--ink);
+}
+.formula .t { display: inline-flex; align-items: center; gap: 6px; }
+.factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 0 32px; margin-top: 28px; }
+.factor { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 4px 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+.factor .sw { margin-top: 7px; }
+.factor h3 { font-size: 1rem; }
+.factor code { display: block; margin-top: 4px; font-weight: 400; color: var(--ink-2); letter-spacing: 0; }
+.factor p { color: var(--ink-2); font-size: 0.9rem; grid-column: 2; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
+
+.worked { padding: 0; }
+.worked .panel-head h3 { font-size: 1rem; }
+
+/* pipeline */
+.flow { display: grid; grid-template-columns: minmax(0, 1.3fr) auto minmax(0, 1fr) auto minmax(0, 0.8fr); gap: 12px; align-items: stretch; }
+@media (max-width: 860px) { .flow { grid-template-columns: minmax(0, 1fr); } .flow .arrow { transform: rotate(90deg); justify-self: center; } }
+.stage { padding: 16px; display: grid; gap: 10px; align-content: start; }
+.stage h3 { font-size: 1rem; }
+.branch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 0.88rem; padding: 6px 0; border-top: 1px dashed var(--line); }
+.branch:first-of-type { border-top: 0; }
+.branch .num { color: var(--ink); font-weight: 600; }
+.arrow { align-self: center; color: var(--ink-3); }
+.big { font: 750 2.4rem/1 var(--font-display); letter-spacing: -0.03em; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+@media (max-width: 700px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { padding: 16px 18px; display: grid; gap: 4px; border-left: 1px solid var(--line); }
+.stat:first-child { border-left: 0; }
+@media (max-width: 700px) { .stat:nth-child(3) { border-left: 0; } .stat:nth-child(n+3) { border-top: 1px solid var(--line); } }
+.stat .big { font-size: 1.9rem; }
+.stat p { font-size: 0.82rem; color: var(--ink-2); }
+.hub-list { margin: 28px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 0 32px; }
+.hub-list li { padding: 14px 0; border-top: 1px solid var(--line); display: grid; gap: 4px; font-size: 0.9rem; color: var(--ink-2); }
+.hub-list b { color: var(--ink); font-weight: 600; }
+.tag { font: 500 0.68rem var(--font-mono); color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; justify-self: start; }
+
+/* model */
+.diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.diagram svg { display: block; min-width: 620px; width: 100%; height: auto; }
+.diagram .box { fill: var(--panel-2); stroke: var(--line-2); }
+.diagram .box.user { fill: var(--accent-soft); stroke: var(--accent); }
+.diagram .lbl { font: 600 13px var(--font-mono); fill: var(--ink); }
+.diagram .prop { font: 400 10.5px var(--font-mono); fill: var(--ink-2); }
+.diagram .rel { stroke: var(--ink-3); stroke-width: 1.3; fill: none; }
+.diagram .rel-t { font: 500 10px var(--font-mono); fill: var(--ink-2); }
+.diagram .rel-bg { fill: var(--panel); }
+.diagram .gds { fill: var(--accent); font: 600 10.5px var(--font-mono); }
+.idx { width: 100%; border-collapse: collapse; font-size: 0.86rem; background: var(--panel); }
+.idx th, .idx td { text-align: left; padding: 9px 12px; vertical-align: top; }
+.idx th { font-weight: 500; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.idx tbody tr:nth-child(even) { background: var(--panel-2); }
+.idx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* gds */
+.algos { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.algo { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .algo { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+.algo p { color: var(--ink-2); font-size: 0.9rem; }
+
+/* defense */
+.innov { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.innov article { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 860px) { .innov article { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+.innov p { color: var(--ink-2); font-size: 0.92rem; }
+.innov .trade { border-left: 2px solid var(--f-geo); padding-left: 12px; }
+.innov .trade .label { display: block; margin-bottom: 4px; }
+.qa { margin-top: 36px; display: grid; gap: 8px; }
+.qa details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.qa summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.qa summary::-webkit-details-marker { display: none; }
+.qa summary::after { content: "+"; font: 500 1.1rem/1 var(--font-mono); color: var(--ink-3); transition: transform var(--t-std) var(--ease); }
+.qa details[open] summary::after { transform: rotate(45deg); }
+.qa details p { padding: 0 16px 16px; color: var(--ink-2); max-width: 75ch; }
+
+/* cypher */
+.tabs { display: flex; gap: 4px; overflow-x: auto; padding: 8px; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.tab { border: 0; background: none; padding: 7px 12px; border-radius: var(--radius-sm); cursor: pointer; font: 500 0.82rem var(--font-mono); color: var(--ink-2); white-space: nowrap; transition: background var(--t-quick) var(--ease), color var(--t-quick) var(--ease); }
+.tab:hover { background: var(--panel-2); color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+pre.code { margin: 0; padding: 16px; overflow: auto; max-height: 560px; font: 400 0.8rem/1.65 var(--font-mono); color: var(--ink); tab-size: 2; }
+.code .kw { color: var(--accent); font-weight: 500; }
+.code .cm { color: var(--ink-3); font-style: italic; }
+.code .st { color: var(--f-interest); }
+.code .pr { color: var(--f-structural); }
+
+footer { border-top: 1px solid var(--line); padding-block: 40px 56px; color: var(--ink-2); font-size: 0.88rem; }
+footer .wrap { display: grid; gap: 14px; }
+footer pre { margin: 0; font: 400 0.82rem/1.7 var(--font-mono); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; overflow-x: auto; color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Friend Graph Recommender, back to top">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="5" cy="16" r="3.2" fill="var(--accent)"/><circle cx="17" cy="16" r="3.2" fill="none" stroke="var(--accent)" stroke-width="1.6"/><circle cx="11" cy="5" r="3.2" fill="none" stroke="var(--accent)" stroke-width="1.6"/><path d="M7.6 14.2 9.6 7.6M12.4 7.6l2 6.6" stroke="var(--accent)" stroke-width="1.6"/><path d="M8.4 16h5.2" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="1.6 1.8"/></svg>
+      Friend Graph
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#demo">Demo</a>
+      <a href="#scoring">Scoring</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#model">Data model</a>
+      <a href="#gds">GDS</a>
+      <a href="#defense">Defense</a>
+      <a href="#cypher">Cypher</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap" id="demo">
+    <div class="hero">
+      <h1>Who should <span class="who" id="who">Jyothish</span> meet next?</h1>
+      <p>Neo4j ranks people by mutual friends, shared interests, community, distance and recency. Click anyone in the network to rebuild their ranking.</p>
+    </div>
+
+    <div class="demo">
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="label">Seed network, 16 people</span>
+            <label class="switch" for="gds">
+              <input type="checkbox" id="gds">
+              <span class="track" aria-hidden="true"></span>
+              Louvain communities
+            </label>
+          </div>
+          <div class="graph-wrap">
+            <svg id="graph" viewBox="0 0 640 500" role="group" aria-label="Friendship network. Select a person to see their recommendations."></svg>
+          </div>
+          <div class="graph-legend" aria-hidden="true">
+            <span><i class="key me"></i>Selected</span>
+            <span><i class="key friend"></i>Friend</span>
+            <span><i class="key rec"></i>Recommended</span>
+            <span><i class="key hull"></i>Louvain community</span>
+            <span>Edge width shows tie strength, faded edges are stale</span>
+          </div>
+        </div>
+
+        <div class="panel weights-panel">
+          <div class="panel-head">
+            <span class="label" id="weights-title">Factor weights</span>
+            <button class="btn" id="reset-weights" type="button">Reset weights</button>
+          </div>
+          <div class="panel-body">
+            <div class="weights" id="weights"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" aria-live="polite">
+        <div class="panel-head" style="display:grid; gap:12px; justify-content:stretch;">
+          <div class="field">
+            <label class="label" for="person">Recommend for</label>
+            <select id="person"></select>
+          </div>
+          <div class="readout-meta">
+            <span class="pill" id="strategy">Hybrid</span>
+            <div class="legend" id="legend"></div>
+          </div>
+        </div>
+        <ol class="results" id="results"></ol>
+        <div class="note" id="note" hidden></div>
+        <div class="note" style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+          <span>Connect adds a friendship and re-runs the query.</span>
+          <button class="btn" id="reset-net" type="button" hidden>Reset network</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="block" id="scoring">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Scoring</span>
+        <h2>Five factors, one score out of 100</h2>
+        <p>Every factor is normalised into the range 0 to 1 and the weights sum to 1, so the match score is bounded by construction. Change the weights in the demo and the ranking reorders live.</p>
+      </div>
+      <div class="formula" id="formula"></div>
+      <div class="factors" id="factor-defs"></div>
+
+      <div class="split" style="margin-top:40px;">
+        <div class="block-head" style="margin:0;">
+          <h3 style="font-size:1.3rem;">Saturating, not min-max</h3>
+          <p>Min-max normalisation depends on who else made the list, so the same pair would score differently on every request. <code>1 - e<sup>-x</sup></code> is computed per pair: scores stay stable across users, and the tenth mutual friend adds less than the second.</p>
+          <p>When a user has no friends at all, the structural factors are zero for everyone, so the engine switches to a cold-start formula built from onboarding signals. Pick <b>Meera</b> in the demo to see it.</p>
+        </div>
+        <div class="panel worked">
+          <div class="panel-head"><h3 id="worked-title">Worked example</h3><span class="pill" id="worked-score">0</span></div>
+          <div class="panel-body why table-scroll" id="worked"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="pipeline">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Pipeline</span>
+        <h2>Generate candidates cheaply, score them carefully</h2>
+        <p>The same two-stage shape large recommenders use. Stage 1 unions bounded traversals, Stage 2 computes the expensive features only for the survivors. Counts below are live for <b id="flow-who">Jyothish</b>.</p>
+      </div>
+      <div class="flow">
+        <div class="panel stage">
+          <span class="label">Stage 1, candidate generation</span>
+          <div id="branches"></div>
+        </div>
+        <svg class="arrow" width="28" height="20" viewBox="0 0 28 20" aria-hidden="true"><path d="M2 10h22M17 3l7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <div class="panel stage">
+          <span class="label">Distinct, minus friends</span>
+          <div class="big num" id="pool">0</div>
+          <p class="muted" style="font-size:.88rem;">candidates scored on every factor through anchored pattern comprehensions.</p>
+        </div>
+        <svg class="arrow" width="28" height="20" viewBox="0 0 28 20" aria-hidden="true"><path d="M2 10h22M17 3l7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <div class="panel stage">
+          <span class="label">Top-k heap</span>
+          <div class="big num" id="topk">0</div>
+          <p class="muted" style="font-size:.88rem;">returned with a reason and a factor breakdown.</p>
+        </div>
+      </div>
+
+      <div class="stats" aria-label="Measured with PROFILE on Neo4j 2026.09, laptop, warm plan cache">
+        <div class="stat"><span class="label">Anchor lookup</span><div class="big num">2</div><p>db hits, NodeUniqueIndexSeek on userId</p></div>
+        <div class="stat"><span class="label">Hybrid query</span><div class="big num">945</div><p>total db hits for Jyothish</p></div>
+        <div class="stat"><span class="label">Server time p50</span><div class="big num">16 ms</div><p>22 ms at p95, warm plan cache</p></div>
+        <div class="stat"><span class="label">Cold-start query</span><div class="big num">921</div><p>db hits, 17 ms p50</p></div>
+      </div>
+
+      <div class="block-head" style="margin:44px 0 0;">
+        <h3 style="font-size:1.3rem;">The celebrity problem</h3>
+        <p>One user with a million friends turns a two-hop expansion into a million rows. Five defences, in the order the queries apply them:</p>
+      </div>
+      <ul class="hub-list">
+        <li><span class="tag">implemented</span><b>Degree-capped expansion</b>Every hub is checked with <code>COUNT { (m)-[:FRIENDS_WITH]-() } &lt;= 200</code>, which compiles to an O(1) <code>getDegree</code> lookup.</li>
+        <li><span class="tag">implemented</span><b>Adamic-Adar down-weights hubs</b>A mutual friend contributes 1 / ln(degree), so skipping celebrities costs almost no accuracy.</li>
+        <li><span class="tag">implemented</span><b>Bounded branches</b>City and activity branches stop at <code>LIMIT 50</code>, so a metro of ten million cannot flood Stage 1.</li>
+        <li><span class="tag">modelled</span><b>Separate relationship types</b>Follower edges to public figures belong on <code>:FOLLOWS</code>, which friendship traversals never touch.</li>
+        <li><span class="tag">batch</span><b>Precompute offline</b>For extreme hubs, GDS writes <code>SIMILAR_TO</code> overnight and the online path serves it in O(k).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" id="model">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Data model</span>
+        <h2>Attributes are nodes, signals live on edges</h2>
+        <p>Interests, places, schools and employers are nodes, so "who else likes Hiking" is a traversal, not a scan. Friendship is stored once and matched in both directions. Properties marked GDS are written by the nightly batch job.</p>
+      </div>
+      <div class="diagram">
+        <svg viewBox="0 0 760 430" role="img" aria-label="Graph schema: User connects to Interest, Group, Place, Company, School and to other Users.">
+          <!-- relationships -->
+          <path class="rel" d="M380 150 V88"/>
+          <path class="rel" d="M460 175 L580 110"/>
+          <path class="rel" d="M460 240 L580 300"/>
+          <path class="rel" d="M300 175 L180 110"/>
+          <path class="rel" d="M300 240 L180 300"/>
+          <path class="rel" d="M350 286 V340"/>
+          <path class="rel" d="M410 340 V286" stroke-dasharray="4 4"/>
+          <g>
+            <rect class="rel-bg" x="306" y="108" width="148" height="18" rx="3"/><text class="rel-t" x="380" y="121" text-anchor="middle">INTERESTED_IN {weight}</text>
+            <rect class="rel-bg" x="452" y="128" width="148" height="18" rx="3"/><text class="rel-t" x="526" y="141" text-anchor="middle">MEMBER_OF {role, joinedAt}</text>
+            <rect class="rel-bg" x="476" y="262" width="100" height="18" rx="3"/><text class="rel-t" x="526" y="275" text-anchor="middle">LIVES_IN {since}</text>
+            <rect class="rel-bg" x="176" y="128" width="112" height="18" rx="3"/><text class="rel-t" x="232" y="141" text-anchor="middle">WORKS_AT {since}</text>
+            <rect class="rel-bg" x="192" y="262" width="82" height="18" rx="3"/><text class="rel-t" x="233" y="275" text-anchor="middle">STUDIED_AT</text>
+            <rect class="rel-bg" x="150" y="304" width="196" height="30" rx="3"/><text class="rel-t" x="340" y="316" text-anchor="end">FRIENDS_WITH {strength,</text><text class="rel-t" x="340" y="329" text-anchor="end">interactions, lastInteraction}</text>
+            <rect class="rel-bg" x="416" y="304" width="132" height="18" rx="3"/><text class="gds" x="420" y="317">SIMILAR_TO {score} GDS</text>
+          </g>
+          <!-- nodes -->
+          <rect class="box" x="300" y="40" width="160" height="48" rx="8"/><text class="lbl" x="314" y="60">:Interest</text><text class="prop" x="314" y="77">name, category</text>
+          <rect class="box" x="580" y="80" width="160" height="48" rx="8"/><text class="lbl" x="594" y="100">:Group</text><text class="prop" x="594" y="117">groupId, name</text>
+          <rect class="box" x="580" y="280" width="160" height="48" rx="8"/><text class="lbl" x="594" y="300">:Place</text><text class="prop" x="594" y="317">location: Point</text>
+          <rect class="box" x="20" y="80" width="160" height="48" rx="8"/><text class="lbl" x="34" y="100">:Company</text><text class="prop" x="34" y="117">name</text>
+          <rect class="box" x="20" y="280" width="160" height="48" rx="8"/><text class="lbl" x="34" y="300">:School</text><text class="prop" x="34" y="317">name</text>
+          <rect class="box user" x="300" y="150" width="160" height="136" rx="8"/>
+          <text class="lbl" x="314" y="172">:User</text>
+          <text class="prop" x="314" y="192">userId (unique)</text>
+          <text class="prop" x="314" y="208">username (unique)</text>
+          <text class="prop" x="314" y="224">joinedAt, lastActiveAt</text>
+          <text class="gds" x="314" y="250">communityId  GDS</text>
+          <text class="gds" x="314" y="266">embedding[64]  GDS</text>
+          <rect class="box user" x="300" y="340" width="160" height="48" rx="8"/><text class="lbl" x="314" y="360">:User</text><text class="prop" x="314" y="377">another person</text>
+        </svg>
+      </div>
+
+      <div class="idx-wrap" style="margin-top:24px;">
+        <table class="idx">
+          <thead><tr><th>Index</th><th>Type</th><th>Serves</th></tr></thead>
+          <tbody>
+            <tr><td><code>User.userId</code>, <code>User.username</code>, <code>Interest.name</code>, <code>Group.groupId</code>, <code>Place.placeId</code></td><td>Unique</td><td>The anchor seek and every MERGE</td></tr>
+            <tr><td><code>User.lastActiveAt</code></td><td>Range</td><td>Cold-start "recently active" branch, confirmed as NodeIndexScan</td></tr>
+            <tr><td><code>User.communityId</code></td><td>Range</td><td>Community browsing written by Louvain</td></tr>
+            <tr><td><code>Place.location</code></td><td>Point</td><td>Radius and bounding-box search</td></tr>
+            <tr><td><code>FRIENDS_WITH.lastInteraction</code></td><td>Relationship range</td><td>Recently active ties</td></tr>
+            <tr><td><code>User.name</code>, <code>User.username</code></td><td>Full-text</td><td>The people search box</td></tr>
+            <tr><td><code>User.embedding</code></td><td>Vector, 64-d cosine</td><td>Online nearest-neighbour lookup</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="gds">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Graph Data Science</span>
+        <h2>An offline layer the online query can live without</h2>
+        <p>A nightly job writes plain properties and relationships. The online queries read them with null checks, so if GDS has never run, recommendations still work with fewer signals. Turn on Louvain communities in the demo to see the effect.</p>
+      </div>
+      <div class="algos">
+        <div class="algo"><h3>Louvain</h3><p>Weighted by tie strength on the undirected friendship projection. Writes <code>communityId</code>.</p><p>Here: 5 communities, modularity 0.442. Feeds the community factor and the cold-start diversity cap.</p></div>
+        <div class="algo"><h3>FastRP</h3><p>64-dimension embeddings over a mixed graph of users, interests, groups and places.</p><p>Including attribute nodes lets a user with zero friends still get a meaningful vector. Meera lands next to Ananya and Vikram, the other Machine Learning people.</p></div>
+        <div class="algo"><h3>kNN</h3><p>Cosine top 5 over the embeddings, written as <code>SIMILAR_TO {score}</code>.</p><p>Cutoff tuned to 0.9 from the observed distribution (p10 to p90 was 0.85 to 0.97), because a textbook 0.5 kept every pair.</p></div>
+        <div class="algo"><h3>Vector index</h3><p><code>db.index.vector.queryNodes</code> on <code>User.embedding</code>.</p><p>An approximate nearest-neighbour path for when <code>SIMILAR_TO</code> is a night out of date.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="defense">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Project defense</span>
+        <h2>Four decisions worth defending</h2>
+        <p>Each one comes with the cost it pays. Examiners ask about the trade-off more often than the feature.</p>
+      </div>
+      <div class="innov">
+        <article>
+          <h3>Two-stage retrieval on index-free adjacency</h3>
+          <p>Bounded multi-source candidate generation, then scoring on a small set: 14 candidates for Jyothish. Each hop follows stored pointers, so cost tracks the edges touched, not total users. SQL would self-join a friendships table once per hop.</p>
+          <p class="trade"><span class="label">Trade-off</span>The hub cap trades recall for predictable latency. Two people linked only through a celebrity are never suggested, which is usually right because that link is weak evidence.</p>
+        </article>
+        <article>
+          <h3>Weighted Adamic-Adar with a saturating transform</h3>
+          <p>Each mutual friend votes 1 / ln(degree), scaled by both tie strengths. Plain counts reward people who know everyone and Jaccard penalises active users. Adamic-Adar is among the strongest classic link predictors (Liben-Nowell and Kleinberg, 2007).</p>
+          <p class="trade"><span class="label">Trade-off</span>Cost grows with the two-hop neighbourhood. The saturation constant 1.5 is a hyperparameter, but it buys scores that are stable per pair instead of relative to each result list.</p>
+        </article>
+        <article>
+          <h3>Online query, offline GDS, graceful degradation</h3>
+          <p>Louvain, FastRP and kNN run as a batch job and write properties the online query reads with <code>coalesce</code>. FastRP runs on users and their attributes together, so a friendless user still gets an embedding.</p>
+          <p class="trade"><span class="label">Trade-off</span>Freshness against latency. Batch outputs are hours old, which is why the cold-start query computes attribute similarity live instead of waiting for the next run.</p>
+        </article>
+        <article>
+          <h3>Cold-start ladder with diversity re-ranking</h3>
+          <p>The formula switches by available data: interests, then group or employer, then city, then active users. At most two people per Louvain community, and every result carries a reason and a factor breakdown.</p>
+          <p class="trade"><span class="label">Trade-off</span>The diversity cap gives up some precision at k for coverage, which matters most when you know nothing about the user. Explanations are free because they reuse the scored features.</p>
+        </article>
+      </div>
+
+      <div class="qa">
+        <span class="label">Likely questions</span>
+        <details><summary>Why not just count mutual friends?</summary><p>Kavya and Rahul both share two mutual friends with Jyothish. Tie strength, freshness, interests and distance separate them: 58.5 against 51.9. Open "Why" on either result in the demo to see where the gap comes from.</p></details>
+        <details><summary>How do you know the weights are right?</summary><p>They are priors, not learned values. To tune them, hide 10% of friendship edges, run the recommender, and measure precision and recall at 10. The next step is logistic regression on accepted and ignored suggestions, using these five factors as features.</p></details>
+        <details><summary>What happens if GDS is not installed?</summary><p>Everything except the batch script still runs. The community and embedding terms evaluate to zero and the other four factors carry the ranking, which is exactly what the demo shows with the Louvain switch off.</p></details>
+        <details><summary>Directed or undirected friendship?</summary><p>Neo4j relationships always have a direction, so each friendship is stored once and matched with <code>-[:FRIENDS_WITH]-</code>. The backend uses an undirected MERGE so a reverse duplicate can never be created, and GDS projects it as UNDIRECTED.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="cypher">
+    <div class="wrap">
+      <div class="block-head">
+        <span class="label">Source</span>
+        <h2>The Cypher behind the demo</h2>
+        <p>The backend executes these files directly, and the demo above is a line-for-line port of queries 3 and 4. Its scores match Neo4j's output on this seed.</p>
+      </div>
+      <div class="panel">
+        <div class="tabs" role="tablist" id="tabs" aria-label="Cypher files"></div>
+        <div class="code-head"><span class="muted" id="code-desc" style="font-size:.86rem;"></span><button class="btn" id="copy" type="button">Copy</button></div>
+        <pre class="code" id="code" tabindex="0"></pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="label">Run it yourself</span>
+    <pre>cd friend-recommendation-neo4j/backend
+npm run seed              # schema + demo network
+npm run seed -- --gds     # also Louvain, FastRP and kNN (GDS plugin)
+npm run dev               # GET /api/friends/suggested?user_id=&lt;id&gt;</pre>
+    <p>Requires Neo4j 5.23 or newer. In Neo4j Browser, set <code>:param userId =&gt; 'U01'</code> and run <code>03_recommend_hybrid.cypher</code>, or <code>'U16'</code> with <code>04_recommend_cold_start.cypher</code>.</p>
+  </div>
+</footer>
+
+<script>
+/* Seed network: mirrors cypher/02_seed.cypher. Times are "days ago". */
+const PLACES = {
+  P01: { name: "Chennai", lat: 13.0827, lon: 80.2707 },
+  P02: { name: "Vellore", lat: 12.9165, lon: 79.1325 },
+  P03: { name: "Bengaluru", lat: 12.9716, lon: 77.5946 },
+  P04: { name: "Hyderabad", lat: 17.385, lon: 78.4867 },
+  P05: { name: "Coimbatore", lat: 11.0168, lon: 76.9558 },
+};
+const USERS = [
+  ["U01", "jyothish", "Jyothish", "P01", 300, 0, "VIT Vellore", null],
+  ["U02", "abhinav", "Abhinav", "P02", 250, 1, "VIT Vellore", null],
+  ["U03", "priya", "Priya", "P01", 400, 2, null, "Zoho"],
+  ["U04", "karthik", "Karthik", "P01", 380, 9, null, "Zoho"],
+  ["U05", "divya", "Divya", "P03", 500, 3, null, "Infosys"],
+  ["U06", "rahul", "Rahul", "P02", 220, 1, "VIT Vellore", null],
+  ["U07", "sneha", "Sneha", "P01", 310, 14, "Anna University", null],
+  ["U08", "arjun", "Arjun", "P03", 450, 5, null, "Infosys"],
+  ["U09", "lakshmi", "Lakshmi", "P05", 290, 30, "Anna University", null],
+  ["U10", "vikram", "Vikram", "P04", 360, 60, null, "Infosys"],
+  ["U11", "ananya", "Ananya", "P01", 200, 0, "VIT Vellore", null],
+  ["U12", "rohan", "Rohan", "P02", 180, 2, "VIT Vellore", null],
+  ["U13", "kavya", "Kavya", "P01", 330, 1, null, "Zoho"],
+  ["U14", "siddharth", "Siddharth", "P03", 600, 90, null, null],
+  ["U15", "nisha", "Nisha", "P04", 150, 45, null, null],
+  ["U16", "meera", "Meera", "P01", 1, 0, "VIT Vellore", null],
+].map(([id, username, name, place, joined, active, school, company]) => ({ id, username, name, place, joined, active, school, company }));
+const INTERESTS = {
+  U01: { Programming: 1.0, Photography: 0.9, Hiking: 0.6 },
+  U02: { Gaming: 1.0, Anime: 0.9, Programming: 0.7 },
+  U03: { Hiking: 0.9, Photography: 0.8, Travel: 0.7 },
+  U04: { Programming: 0.9, Cricket: 0.8 },
+  U05: { Painting: 0.9, Photography: 0.7, Music: 0.6 },
+  U06: { Programming: 1.0, Gaming: 0.6, Cricket: 0.5 },
+  U07: { Music: 0.9, Travel: 0.8, Photography: 0.5 },
+  U08: { Hiking: 0.9, Cricket: 0.7, Travel: 0.6 },
+  U09: { Painting: 0.8, Music: 0.7 },
+  U10: { Programming: 0.9, "Machine Learning": 0.8, Gaming: 0.5 },
+  U11: { "Machine Learning": 1.0, Programming: 0.8, Photography: 0.4 },
+  U12: { Anime: 1.0, Gaming: 0.9 },
+  U13: { Hiking: 1.0, Photography: 0.8, Travel: 0.7 },
+  U14: { Cricket: 0.9, Music: 0.6 },
+  U15: { Painting: 0.8, Travel: 0.7 },
+  U16: { "Machine Learning": 0.9, Photography: 0.8 },
+};
+const GROUPS = {
+  "Chennai Hikers": ["U01", "U03", "U13", "U08"],
+  "VIT Coders Club": ["U01", "U02", "U06", "U11", "U12"],
+  "Shutterbugs Collective": ["U03", "U05", "U07", "U13"],
+  "Anime Guild": ["U02", "U12"],
+};
+const SEED_FRIENDSHIPS = [
+  ["U01", "U02", 0.9, 340, 200, 2], ["U01", "U03", 0.8, 210, 280, 5], ["U01", "U04", 0.5, 60, 250, 40],
+  ["U01", "U11", 0.7, 150, 150, 10], ["U02", "U06", 0.8, 260, 210, 3], ["U02", "U12", 0.9, 300, 170, 1],
+  ["U06", "U12", 0.6, 110, 160, 20], ["U11", "U06", 0.6, 90, 140, 15], ["U11", "U10", 0.4, 25, 190, 120],
+  ["U03", "U13", 0.9, 280, 300, 4], ["U03", "U07", 0.6, 80, 250, 30], ["U04", "U13", 0.5, 45, 300, 60],
+  ["U04", "U14", 0.3, 10, 360, 200], ["U05", "U08", 0.8, 190, 420, 7], ["U05", "U09", 0.6, 70, 280, 25],
+  ["U05", "U14", 0.5, 40, 450, 100], ["U08", "U14", 0.7, 120, 400, 12], ["U08", "U13", 0.4, 30, 200, 80],
+  ["U07", "U09", 0.5, 50, 270, 50], ["U10", "U15", 0.4, 20, 140, 90],
+].map(([a, b, strength, interactions, since, last]) => ({ a, b, strength, interactions, since, last }));
+/* Louvain output from 05_gds.cypher on this seed (5 communities, modularity 0.442) */
+const LOUVAIN = { U01: 1, U02: 1, U06: 1, U11: 1, U12: 1, U03: 2, U04: 2, U07: 2, U13: 2, U05: 7, U08: 7, U09: 7, U14: 7, U10: 14, U15: 14, U16: 15 };
+
+const DEFAULT_WEIGHTS = {
+  hybrid: { structural: 0.4, interest: 0.25, community: 0.15, geo: 0.1, recency: 0.1 },
+  cold: { interest: 0.45, context: 0.2, geo: 0.2, social: 0.15 },
+};
+const T = { maxHubDegree: 200, aaScale: 1.5, geoScaleKm: 50, tieHalfLife: 90, activityHalfLife: 30, perCommunityCap: 2, k: 10 };
+
+const byId = Object.fromEntries(USERS.map((u) => [u.id, u]));
+const groupsOf = (id) => Object.keys(GROUPS).filter((g) => GROUPS[g].includes(id));
+const orgsOf = (id) => [byId[id].school, byId[id].company].filter(Boolean);
+const mass = (id) => Object.values(INTERESTS[id] || {}).reduce((s, w) => s + w, 0);
+const round = (x, d) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
+
+/* Neo4j point.distance on WGS-84 points (haversine, R = 6378.14 km) */
+function distanceKm(p1, p2) {
+  const a = PLACES[p1], b = PLACES[p2], rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6378.14 * Math.asin(Math.sqrt(h));
+}
+
+function makeGraph(friendships) {
+  const adj = Object.fromEntries(USERS.map((u) => [u.id, []]));
+  for (const f of friendships) {
+    adj[f.a].push({ other: f.b, edge: f });
+    adj[f.b].push({ other: f.a, edge: f });
+  }
+  const deg = (id) => adj[id].length;
+  const tie = (x, y) => adj[x].find((n) => n.other === y)?.edge;
+  return { adj, deg, tie, friendships };
+}
+
+function sharedInterests(me, c) {
+  const a = INTERESTS[me] || {}, b = INTERESTS[c] || {};
+  return Object.keys(a).filter((k) => k in b).map((name) => ({ name, overlap: Math.min(a[name], b[name]) }));
+}
+function weightedJaccard(me, c, shared) {
+  const overlap = shared.reduce((s, x) => s + x.overlap, 0);
+  const denom = mass(me) + mass(c) - overlap;
+  return { overlap, value: denom > 0 ? overlap / denom : 0 };
+}
+
+/* Stage 1 of both queries: union of bounded branches, then DISTINCT + filters */
+function candidates(G, me, branches) {
+  const counts = {}, set = new Set();
+  for (const [name, fn] of branches) {
+    const rows = fn();
+    counts[name] = new Set(rows.filter((c) => c !== me)).size;
+    rows.forEach((c) => set.add(c));
+  }
+  const pool = [...set].filter((c) => c !== me && !G.tie(me, c));
+  return { counts, pool };
+}
+const byActivity = (ids) => ids.sort((x, y) => byId[x].active - byId[y].active).slice(0, 50);
+const commonBranches = (G, me) => [
+  ["Shared interests", () => USERS.filter((u) => u.id !== me && sharedInterests(me, u.id).length).flatMap((u) => sharedInterests(me, u.id).map(() => u.id))],
+  ["Group, school, employer", () => USERS.filter((u) => u.id !== me).flatMap((u) => {
+    const n = groupsOf(me).filter((g) => groupsOf(u.id).includes(g)).length + orgsOf(me).filter((o) => orgsOf(u.id).includes(o)).length;
+    return Array(n).fill(u.id);
+  })],
+  ["Same city", () => byActivity(USERS.filter((u) => u.place === byId[me].place).map((u) => u.id))],
+];
+
+function recommendHybrid(G, me, w, useGds) {
+  const { counts, pool } = candidates(G, me, [
+    ["Friends of friends", () => G.adj[me].filter((m) => G.deg(m.other) <= T.maxHubDegree).flatMap((m) => G.adj[m.other].filter((n) => n.edge !== m.edge).map((n) => n.other))],
+    ...commonBranches(G, me),
+  ]);
+  const rows = pool.map((c) => {
+    const mutuals = G.adj[me].filter((m) => G.tie(m.other, c) && G.deg(m.other) <= T.maxHubDegree).map((m) => {
+      const r1 = m.edge, r2 = G.tie(m.other, c), d = G.deg(m.other);
+      return { id: m.other, name: byId[m.other].name, degree: d, s1: r1.strength, s2: r2.strength, aa: Math.sqrt(r1.strength * r2.strength) / Math.log(d), days: Math.max(r1.last, r2.last) };
+    });
+    const shared = sharedInterests(me, c);
+    const jac = weightedJaccard(me, c, shared);
+    const sharedGroups = groupsOf(me).filter((g) => groupsOf(c).includes(g));
+    const sharedOrgs = orgsOf(me).filter((o) => orgsOf(c).includes(o));
+    const sameCommunity = useGds && LOUVAIN[me] === LOUVAIN[c];
+    const km = distanceKm(byId[me].place, byId[c].place);
+    const aa = mutuals.reduce((s, x) => s + x.aa, 0);
+    const freshest = mutuals.reduce((d, x) => Math.min(d, x.days), 100000);
+    const s = {
+      structural: 1 - Math.exp(-aa / T.aaScale),
+      interest: jac.value,
+      community: 1 - Math.exp(-(0.6 * sharedGroups.length + 0.6 * sharedOrgs.length + (sameCommunity ? 0.4 : 0))),
+      geo: Math.exp(-km / T.geoScaleKm),
+      recency: 0.5 * (mutuals.length ? 0.5 ** (freshest / T.tieHalfLife) : 0) + 0.5 * 0.5 ** (byId[c].active / T.activityHalfLife),
+    };
+    const score = 100 * Object.keys(w).reduce((t, k) => t + w[k] * s[k], 0);
+    const reason =
+      mutuals.length > 1 ? `${mutuals.length} mutual friends`
+      : mutuals.length === 1 ? `Friends with ${mutuals[0].name}`
+      : shared.length ? `Also into ${shared[0].name}`
+      : sharedGroups.length ? `Both in ${sharedGroups[0]}`
+      : sharedOrgs.length ? `Both at ${sharedOrgs[0]}`
+      : km < 1 ? "Lives in your city" : "Similar network";
+    return { id: c, score, s, mutuals, shared, jac, sharedContext: [...sharedGroups, ...sharedOrgs], sameCommunity, km, aa, freshest, reason };
+  });
+  rows.sort((x, y) => y.score - x.score || y.mutuals.length - x.mutuals.length || (x.id < y.id ? -1 : 1));
+  return { strategy: "hybrid", counts, poolSize: pool.length, results: rows.slice(0, T.k) };
+}
+
+function recommendColdStart(G, me, w, useGds) {
+  const { counts, pool } = candidates(G, me, [
+    ...commonBranches(G, me),
+    ["Recently active", () => byActivity(USERS.map((u) => u.id).filter((id) => G.deg(id) >= 1 && G.deg(id) <= T.maxHubDegree))],
+  ]);
+  const rows = pool.map((c) => {
+    const shared = sharedInterests(me, c);
+    const jac = weightedJaccard(me, c, shared);
+    const sharedContext = [...groupsOf(me).filter((g) => groupsOf(c).includes(g)), ...orgsOf(me).filter((o) => orgsOf(c).includes(o))];
+    const km = distanceKm(byId[me].place, byId[c].place);
+    const degree = G.deg(c);
+    const s = {
+      interest: jac.value,
+      context: 1 - Math.exp(-0.6 * sharedContext.length),
+      geo: Math.exp(-km / T.geoScaleKm),
+      social: (degree / (degree + 5)) * 0.5 ** (byId[c].active / T.activityHalfLife),
+    };
+    const score = 100 * Object.keys(w).reduce((t, k) => t + w[k] * s[k], 0);
+    const reason =
+      shared.length > 1 ? `Also into ${shared[0].name} & ${shared[1].name}`
+      : shared.length === 1 ? `Also into ${shared[0].name}`
+      : sharedContext.length ? `Both at ${sharedContext[0]}`
+      : km < 1 ? "Lives in your city" : "Active in the community";
+    return { id: c, score, s, mutuals: [], shared, jac, sharedContext, km, degree, reason, bucket: useGds ? String(LOUVAIN[c]) : c };
+  });
+  rows.sort((x, y) => y.score - x.score || (x.id < y.id ? -1 : 1));
+  const taken = {}, held = [];
+  const kept = rows.filter((r) => {
+    taken[r.bucket] = (taken[r.bucket] || 0) + 1;
+    if (taken[r.bucket] <= T.perCommunityCap) return true;
+    held.push(r.id);
+    return false;
+  });
+  return { strategy: "cold", counts, poolSize: pool.length, held, results: kept.slice(0, T.k) };
+}
+
+function recommend(G, me, weights, useGds) {
+  return G.deg(me) === 0
+    ? recommendColdStart(G, me, weights.cold, useGds)
+    : recommendHybrid(G, me, weights.hybrid, useGds);
+}
+
+
+const CYPHER = {"01_schema.cypher":"// =====================================================================\n// 01_schema.cypher - constraints & indexes (idempotent, Neo4j 5.x)\n// Run BEFORE the seed: MERGE relies on the uniqueness constraints\n// to do an index lookup instead of a label scan.\n// =====================================================================\n\n// ---------- Uniqueness constraints (each one also creates a RANGE index) ----------\nCREATE CONSTRAINT user_id_unique IF NOT EXISTS\nFOR (u:User) REQUIRE u.userId IS UNIQUE;\n\nCREATE CONSTRAINT user_username_unique IF NOT EXISTS\nFOR (u:User) REQUIRE u.username IS UNIQUE;\n\nCREATE CONSTRAINT interest_name_unique IF NOT EXISTS\nFOR (i:Interest) REQUIRE i.name IS UNIQUE;\n\nCREATE CONSTRAINT group_id_unique IF NOT EXISTS\nFOR (g:Group) REQUIRE g.groupId IS UNIQUE;\n\nCREATE CONSTRAINT place_id_unique IF NOT EXISTS\nFOR (p:Place) REQUIRE p.placeId IS UNIQUE;\n\nCREATE CONSTRAINT company_name_unique IF NOT EXISTS\nFOR (c:Company) REQUIRE c.name IS UNIQUE;\n\nCREATE CONSTRAINT school_name_unique IF NOT EXISTS\nFOR (s:School) REQUIRE s.name IS UNIQUE;\n\n// ---------- Secondary indexes ----------\n// Cold-start fallback orders candidates by recent activity -> index-backed ORDER BY\nCREATE INDEX user_last_active IF NOT EXISTS\nFOR (u:User) ON (u.lastActiveAt);\n\n// Written by Louvain (05_gds.cypher); used for \"same community\" + diversity re-ranking\nCREATE INDEX user_community IF NOT EXISTS\nFOR (u:User) ON (u.communityId);\n\n// Interest browsing by category (\"show me Outdoors people\")\nCREATE INDEX interest_category IF NOT EXISTS\nFOR (i:Interest) ON (i.category);\n\n// Geospatial: point index enables point.distance() radius / bounding-box seeks\nCREATE POINT INDEX place_location IF NOT EXISTS\nFOR (p:Place) ON (p.location);\n\n// Relationship-property index: \"friends I talked to in the last N days\"\nCREATE INDEX friends_last_interaction IF NOT EXISTS\nFOR ()-[r:FRIENDS_WITH]-() ON (r.lastInteraction);\n\n// Full-text (Lucene) index for the people-search box\nCREATE FULLTEXT INDEX user_search IF NOT EXISTS\nFOR (u:User) ON EACH [u.name, u.username];\n","02_seed.cypher":"// =====================================================================\n// 02_seed.cypher - self-contained demo network\n//   16 Users · 10 Interests · 5 Places · 4 Groups · 2 Companies · 2 Schools\n// All timestamps are RELATIVE to datetime(), so recency scoring behaves\n// the same no matter when you run the script.\n//\n// Story baked into the data (so the demo has something to show):\n//   * U01 Jyothish  : main demo user (4 friends)\n//   * U13 Kavya     : 2 strong mutuals + shared hobbies + same city -> should rank #1 for U01\n//   * U14 Siddharth : reachable via 1 weak, stale tie -> should rank low\n//   * U16 Meera     : brand-new account, 0 friends -> exercises the cold-start query\n// =====================================================================\n\n// ---------- 0. Wipe previous demo data ----------\nMATCH (n)\nWHERE n:User OR n:Interest OR n:Group OR n:Place OR n:Company OR n:School\nDETACH DELETE n;\n\n// ---------- 1. Places (WGS-84 points -> geographic proximity) ----------\nUNWIND [\n  {id: 'P01', name: 'Chennai',    description: 'Tamil Nadu', lat: 13.0827, lon: 80.2707},\n  {id: 'P02', name: 'Vellore',    description: 'Tamil Nadu', lat: 12.9165, lon: 79.1325},\n  {id: 'P03', name: 'Bengaluru',  description: 'Karnataka',  lat: 12.9716, lon: 77.5946},\n  {id: 'P04', name: 'Hyderabad',  description: 'Telangana',  lat: 17.3850, lon: 78.4867},\n  {id: 'P05', name: 'Coimbatore', description: 'Tamil Nadu', lat: 11.0168, lon: 76.9558}\n] AS row\nMERGE (p:Place {placeId: row.id})\nSET p.name = row.name,\n    p.description = row.description,\n    p.location = point({latitude: row.lat, longitude: row.lon});\n\n// ---------- 2. Interests ----------\nUNWIND [\n  ['Photography', 'Arts'], ['Painting', 'Arts'], ['Music', 'Arts'],\n  ['Programming', 'Tech'], ['Machine Learning', 'Tech'],\n  ['Gaming', 'Entertainment'], ['Anime', 'Entertainment'],\n  ['Hiking', 'Outdoors'], ['Travel', 'Outdoors'], ['Cricket', 'Sports']\n] AS row\nMERGE (i:Interest {name: row[0]})\nSET i.category = row[1];\n\n// ---------- 3. Groups, Companies, Schools ----------\nUNWIND [\n  {id: 'G01', name: 'Chennai Hikers',         description: 'Weekend treks around the Eastern Ghats'},\n  {id: 'G02', name: 'VIT Coders Club',        description: 'Hackathons, CP and side projects'},\n  {id: 'G03', name: 'Shutterbugs Collective', description: 'Street & landscape photography walks'},\n  {id: 'G04', name: 'Anime Guild',            description: 'Seasonal watch-alongs and cosplay'}\n] AS row\nMERGE (g:Group {groupId: row.id})\nSET g.name = row.name, g.description = row.description;\n\nUNWIND [\n  {name: 'Zoho',    description: 'SaaS, Chennai'},\n  {name: 'Infosys', description: 'IT services, Bengaluru'}\n] AS row\nMERGE (c:Company {name: row.name})\nSET c.description = row.description;\n\nUNWIND ['VIT Vellore', 'Anna University'] AS name\nMERGE (:School {name: name});\n\n// ---------- 4. Users (+ LIVES_IN, WORKS_AT, STUDIED_AT) ----------\n// joined / active = days ago\nUNWIND [\n  {id: 'U01', u: 'jyothish',  n: 'Jyothish',  place: 'P01', joined: 300, active: 0,  school: 'VIT Vellore',     company: null},\n  {id: 'U02', u: 'abhinav',   n: 'Abhinav',   place: 'P02', joined: 250, active: 1,  school: 'VIT Vellore',     company: null},\n  {id: 'U03', u: 'priya',     n: 'Priya',     place: 'P01', joined: 400, active: 2,  school: null,              company: 'Zoho'},\n  {id: 'U04', u: 'karthik',   n: 'Karthik',   place: 'P01', joined: 380, active: 9,  school: null,              company: 'Zoho'},\n  {id: 'U05', u: 'divya',     n: 'Divya',     place: 'P03', joined: 500, active: 3,  school: null,              company: 'Infosys'},\n  {id: 'U06', u: 'rahul',     n: 'Rahul',     place: 'P02', joined: 220, active: 1,  school: 'VIT Vellore',     company: null},\n  {id: 'U07', u: 'sneha',     n: 'Sneha',     place: 'P01', joined: 310, active: 14, school: 'Anna University', company: null},\n  {id: 'U08', u: 'arjun',     n: 'Arjun',     place: 'P03', joined: 450, active: 5,  school: null,              company: 'Infosys'},\n  {id: 'U09', u: 'lakshmi',   n: 'Lakshmi',   place: 'P05', joined: 290, active: 30, school: 'Anna University', company: null},\n  {id: 'U10', u: 'vikram',    n: 'Vikram',    place: 'P04', joined: 360, active: 60, school: null,              company: 'Infosys'},\n  {id: 'U11', u: 'ananya',    n: 'Ananya',    place: 'P01', joined: 200, active: 0,  school: 'VIT Vellore',     company: null},\n  {id: 'U12', u: 'rohan',     n: 'Rohan',     place: 'P02', joined: 180, active: 2,  school: 'VIT Vellore',     company: null},\n  {id: 'U13', u: 'kavya',     n: 'Kavya',     place: 'P01', joined: 330, active: 1,  school: null,              company: 'Zoho'},\n  {id: 'U14', u: 'siddharth', n: 'Siddharth', place: 'P03', joined: 600, active: 90, school: null,              company: null},\n  {id: 'U15', u: 'nisha',     n: 'Nisha',     place: 'P04', joined: 150, active: 45, school: null,              company: null},\n  {id: 'U16', u: 'meera',     n: 'Meera',     place: 'P01', joined: 1,   active: 0,  school: 'VIT Vellore',     company: null}\n] AS row\nMERGE (u:User {userId: row.id})\nSET u.username     = row.u,\n    u.name         = row.n,\n    u.joinedAt     = datetime() - duration({days: row.joined}),\n    u.lastActiveAt = datetime() - duration({days: row.active}),\n    u.isActive     = true\nWITH u, row\nMATCH (p:Place {placeId: row.place})\nMERGE (u)-[l:LIVES_IN]->(p)\nSET l.since = u.joinedAt\nWITH u, row\n// FOREACH(CASE) = conditional write without breaking the row stream\nFOREACH (_ IN CASE WHEN row.school IS NULL THEN [] ELSE [1] END |\n  MERGE (s:School {name: row.school})\n  MERGE (u)-[:STUDIED_AT]->(s))\nFOREACH (_ IN CASE WHEN row.company IS NULL THEN [] ELSE [1] END |\n  MERGE (c:Company {name: row.company})\n  MERGE (u)-[w:WORKS_AT]->(c)\n  SET w.since = u.joinedAt);\n\n// ---------- 5. INTERESTED_IN {weight 0..1 = how much they care} ----------\nUNWIND [\n  ['U01', 'Programming', 1.0], ['U01', 'Photography', 0.9], ['U01', 'Hiking', 0.6],\n  ['U02', 'Gaming', 1.0], ['U02', 'Anime', 0.9], ['U02', 'Programming', 0.7],\n  ['U03', 'Hiking', 0.9], ['U03', 'Photography', 0.8], ['U03', 'Travel', 0.7],\n  ['U04', 'Programming', 0.9], ['U04', 'Cricket', 0.8],\n  ['U05', 'Painting', 0.9], ['U05', 'Photography', 0.7], ['U05', 'Music', 0.6],\n  ['U06', 'Programming', 1.0], ['U06', 'Gaming', 0.6], ['U06', 'Cricket', 0.5],\n  ['U07', 'Music', 0.9], ['U07', 'Travel', 0.8], ['U07', 'Photography', 0.5],\n  ['U08', 'Hiking', 0.9], ['U08', 'Cricket', 0.7], ['U08', 'Travel', 0.6],\n  ['U09', 'Painting', 0.8], ['U09', 'Music', 0.7],\n  ['U10', 'Programming', 0.9], ['U10', 'Machine Learning', 0.8], ['U10', 'Gaming', 0.5],\n  ['U11', 'Machine Learning', 1.0], ['U11', 'Programming', 0.8], ['U11', 'Photography', 0.4],\n  ['U12', 'Anime', 1.0], ['U12', 'Gaming', 0.9],\n  ['U13', 'Hiking', 1.0], ['U13', 'Photography', 0.8], ['U13', 'Travel', 0.7],\n  ['U14', 'Cricket', 0.9], ['U14', 'Music', 0.6],\n  ['U15', 'Painting', 0.8], ['U15', 'Travel', 0.7],\n  ['U16', 'Machine Learning', 0.9], ['U16', 'Photography', 0.8]\n] AS row\nMATCH (u:User {userId: row[0]}), (i:Interest {name: row[1]})\nMERGE (u)-[r:INTERESTED_IN]->(i)\nSET r.weight = row[2];\n\n// ---------- 6. MEMBER_OF {joinedAt, role} ----------\nUNWIND [\n  ['U01', 'G01', 'member', 120], ['U03', 'G01', 'admin', 380], ['U13', 'G01', 'member', 200], ['U08', 'G01', 'member', 90],\n  ['U01', 'G02', 'member', 280], ['U02', 'G02', 'member', 240], ['U06', 'G02', 'admin', 210], ['U11', 'G02', 'member', 150], ['U12', 'G02', 'member', 100],\n  ['U03', 'G03', 'member', 300], ['U05', 'G03', 'admin', 480], ['U07', 'G03', 'member', 260], ['U13', 'G03', 'member', 180],\n  ['U02', 'G04', 'member', 230], ['U12', 'G04', 'admin', 170]\n] AS row\nMATCH (u:User {userId: row[0]}), (g:Group {groupId: row[1]})\nMERGE (u)-[m:MEMBER_OF]->(g)\nSET m.role = row[2], m.joinedAt = datetime() - duration({days: row[3]});\n\n// ---------- 7. FRIENDS_WITH - stored ONCE, queried undirected ----------\n// strength 0..1 (tie strength), interactions = message/like/comment count,\n// since / lastInteraction = days ago\nUNWIND [\n  ['U01', 'U02', 0.9, 340, 200, 2],\n  ['U01', 'U03', 0.8, 210, 280, 5],\n  ['U01', 'U04', 0.5,  60, 250, 40],\n  ['U01', 'U11', 0.7, 150, 150, 10],\n  ['U02', 'U06', 0.8, 260, 210, 3],\n  ['U02', 'U12', 0.9, 300, 170, 1],\n  ['U06', 'U12', 0.6, 110, 160, 20],\n  ['U11', 'U06', 0.6,  90, 140, 15],\n  ['U11', 'U10', 0.4,  25, 190, 120],\n  ['U03', 'U13', 0.9, 280, 300, 4],\n  ['U03', 'U07', 0.6,  80, 250, 30],\n  ['U04', 'U13', 0.5,  45, 300, 60],\n  ['U04', 'U14', 0.3,  10, 360, 200],\n  ['U05', 'U08', 0.8, 190, 420, 7],\n  ['U05', 'U09', 0.6,  70, 280, 25],\n  ['U05', 'U14', 0.5,  40, 450, 100],\n  ['U08', 'U14', 0.7, 120, 400, 12],\n  ['U08', 'U13', 0.4,  30, 200, 80],\n  ['U07', 'U09', 0.5,  50, 270, 50],\n  ['U10', 'U15', 0.4,  20, 140, 90]\n] AS row\nMATCH (a:User {userId: row[0]}), (b:User {userId: row[1]})\nMERGE (a)-[f:FRIENDS_WITH]->(b)\nSET f.strength        = row[2],\n    f.interactions    = row[3],\n    f.since           = datetime() - duration({days: row[4]}),\n    f.lastInteraction = datetime() - duration({days: row[5]});\n","03_recommend_hybrid.cypher":"// =====================================================================\n// 03_recommend_hybrid.cypher - QUERY 1: weighted multi-factor recommender\n// Requires Neo4j >= 5.23 (scoped CALL subqueries, COUNT{} subqueries).\n// Neo4j Browser:   :param userId => 'U01'\n//\n// Two-stage retrieval (the same shape as YouTube/LinkedIn recommenders):\n//   Stage 1  CANDIDATE GENERATION - cheap, bounded, multi-source union\n//   Stage 2  FEATURE SCORING      - expensive features computed only for candidates\n//\n// match_score = 100 * ( 0.40 * S_structural   tie-weighted Adamic-Adar, saturated\n//                     + 0.25 * S_interest     weighted Jaccard over interest weights\n//                     + 0.15 * S_community    groups, org, Louvain cluster, FastRP kNN\n//                     + 0.10 * S_geo          exp(-km / 50)\n//                     + 0.10 * S_recency )    half-life decay of ties + candidate activity\n// Every S_x is in [0,1] and the weights sum to 1, so match_score is in [0,100].\n// =====================================================================\n\n// ---------- Tunables (one place to change them) ----------\nWITH {structural: 0.40, interest: 0.25, community: 0.15, geo: 0.10, recency: 0.10} AS w,\n     200       AS maxHubDegree,    // \"celebrity\" cut-off for intermediate nodes\n     1.5       AS aaScale,         // Adamic-Adar saturation constant\n     50.0      AS geoScaleKm,      // distance at which S_geo falls to 1/e\n     90.0      AS tieHalfLifeDays,\n     30.0      AS activityHalfLifeDays,\n     datetime() AS now\n\n// ---------- Anchor: unique-constraint index seek, O(log n) ----------\nMATCH (me:User {userId: $userId})\nOPTIONAL MATCH (me)-[:LIVES_IN]->(myPlace:Place)\nWITH w, maxHubDegree, aaScale, geoScaleKm, tieHalfLifeDays, activityHalfLifeDays, now,\n     me, myPlace,\n     reduce(t = 0.0, x IN [(me)-[r:INTERESTED_IN]->() | r.weight] | t + x) AS myInterestMass\n\n// =====================================================================\n// STAGE 1 - candidate generation. Each branch is bounded so a single\n// hub (celebrity, mega-group, \"Music\") can't explode the frontier.\n// COUNT{(x)-[:T]-()} is answered from the node's degree store in O(1).\n// =====================================================================\nCALL (me, myPlace, maxHubDegree) {\n  // (a) friends-of-friends (triadic closure), skipping hub intermediaries\n  MATCH (me)-[:FRIENDS_WITH]-(m:User)-[:FRIENDS_WITH]-(c:User)\n  WHERE COUNT { (m)-[:FRIENDS_WITH]-() } <= maxHubDegree\n  RETURN c\n  UNION\n  // (b) shared interests, ignoring \"everyone likes this\" interests\n  MATCH (me)-[:INTERESTED_IN]->(i:Interest)<-[:INTERESTED_IN]-(c:User)\n  WHERE COUNT { (i)<-[:INTERESTED_IN]-() } <= maxHubDegree\n  RETURN c\n  UNION\n  // (c) shared groups / workplace / school\n  MATCH (me)-[:MEMBER_OF|WORKS_AT|STUDIED_AT]->(ctx)<-[:MEMBER_OF|WORKS_AT|STUDIED_AT]-(c:User)\n  WHERE COUNT { (ctx)<--() } <= maxHubDegree\n  RETURN c\n  UNION\n  // (d) GDS FastRP-kNN neighbours (present only after 05_gds.cypher has run)\n  MATCH (me)-[:SIMILAR_TO]-(c:User)\n  RETURN c\n  UNION\n  // (e) same city - bounded to the 50 most recently active residents\n  MATCH (myPlace)<-[:LIVES_IN]-(c:User)\n  RETURN c ORDER BY c.lastActiveAt DESC LIMIT 50\n}\nWITH DISTINCT w, maxHubDegree, aaScale, geoScaleKm, tieHalfLifeDays, activityHalfLifeDays, now,\n     me, myPlace, myInterestMass, c\nWHERE c <> me\n  AND coalesce(c.isActive, true)\n  AND NOT (me)-[:FRIENDS_WITH]-(c)\n  AND NOT (me)-[:BLOCKED]-(c)\n\n// =====================================================================\n// STAGE 2 - feature extraction (pattern comprehensions are anchored on\n// both endpoints, so each is a tiny bounded expand, not a scan).\n// =====================================================================\nOPTIONAL MATCH (c)-[:LIVES_IN]->(theirPlace:Place)\nWITH w, aaScale, geoScaleKm, tieHalfLifeDays, activityHalfLifeDays, now,\n     me, myInterestMass, c,\n     // --- structural: one entry per mutual friend ---\n     [(me)-[r1:FRIENDS_WITH]-(m:User)-[r2:FRIENDS_WITH]-(c)\n        WHERE COUNT { (m)-[:FRIENDS_WITH]-() } <= maxHubDegree |\n        { name: m.name,\n          // Adamic-Adar term, scaled by the geometric mean of both tie strengths\n          aa:   sqrt(coalesce(r1.strength, 0.5) * coalesce(r2.strength, 0.5))\n                / log(COUNT { (m)-[:FRIENDS_WITH]-() }),\n          // a 2-hop path is only as fresh as its stalest edge\n          days: duration.inDays(\n                  CASE WHEN r1.lastInteraction < r2.lastInteraction\n                       THEN r1.lastInteraction ELSE r2.lastInteraction END,\n                  now).days }] AS mutuals,\n     // --- interest overlap: min(w_me, w_them) for every shared interest ---\n     [(me)-[r1:INTERESTED_IN]->(i:Interest)<-[r2:INTERESTED_IN]-(c) |\n        { name: i.name,\n          overlap: CASE WHEN r1.weight < r2.weight THEN r1.weight ELSE r2.weight END }] AS shared,\n     reduce(t = 0.0, x IN [(c)-[r:INTERESTED_IN]->() | r.weight] | t + x) AS theirInterestMass,\n     // --- community context ---\n     [(me)-[:MEMBER_OF]->(g:Group)<-[:MEMBER_OF]-(c) | g.name]                               AS sharedGroups,\n     [(me)-[:WORKS_AT|STUDIED_AT]->(o)<-[:WORKS_AT|STUDIED_AT]-(c) | o.name]                 AS sharedOrgs,\n     (me.communityId IS NOT NULL AND me.communityId = c.communityId)                          AS sameCommunity,\n     reduce(mx = 0.0, x IN [(me)-[sim:SIMILAR_TO]-(c) | sim.score] |\n            CASE WHEN x > mx THEN x ELSE mx END)                                              AS embeddingSim,\n     // --- geography (null-safe: missing location => no geo signal) ---\n     CASE WHEN myPlace IS NULL OR theirPlace IS NULL THEN null\n          ELSE point.distance(myPlace.location, theirPlace.location) / 1000.0 END            AS distanceKm,\n     duration.inDays(coalesce(c.lastActiveAt, c.joinedAt, now), now).days                     AS inactiveDays\n\n// ---------- Aggregate raw features ----------\nWITH w, aaScale, geoScaleKm, tieHalfLifeDays, activityHalfLifeDays,\n     c, mutuals, shared, sharedGroups, sharedOrgs, sameCommunity, embeddingSim, distanceKm, inactiveDays,\n     reduce(s = 0.0, x IN mutuals | s + x.aa)                                       AS adamicAdar,\n     reduce(s = 0.0, x IN shared  | s + x.overlap)                                  AS overlapMass,\n     reduce(d = 100000, x IN mutuals | CASE WHEN x.days < d THEN x.days ELSE d END) AS freshestPathDays,\n     myInterestMass + theirInterestMass                                             AS totalInterestMass\n\n// ---------- Normalise every factor into [0,1] ----------\nWITH w, c, mutuals, shared, sharedGroups, sharedOrgs, distanceKm, adamicAdar,\n     // saturating transform: per-pair, doesn't depend on who else is in the candidate set\n     1 - exp(-adamicAdar / aaScale) AS sStructural,\n     // weighted Jaccard: sum(min) / sum(max)  where  sum(max) = sum(a) + sum(b) - sum(min)\n     CASE WHEN totalInterestMass - overlapMass > 0\n          THEN overlapMass / (totalInterestMass - overlapMass) ELSE 0.0 END AS sInterest,\n     1 - exp(-( 0.6 * size(sharedGroups)\n              + 0.6 * size(sharedOrgs)\n              + CASE WHEN sameCommunity THEN 0.4 ELSE 0.0 END\n              + 0.5 * embeddingSim )) AS sCommunity,\n     CASE WHEN distanceKm IS NULL THEN 0.0 ELSE exp(-distanceKm / geoScaleKm) END AS sGeo,\n     0.5 * CASE WHEN size(mutuals) = 0 THEN 0.0\n                ELSE 0.5 ^ (freshestPathDays / tieHalfLifeDays) END\n   + 0.5 * 0.5 ^ (inactiveDays / activityHalfLifeDays) AS sRecency\n\nWITH c, mutuals, shared, sharedGroups, sharedOrgs, distanceKm,\n     sStructural, sInterest, sCommunity, sGeo, sRecency,\n     100 * ( w.structural * sStructural\n           + w.interest   * sInterest\n           + w.community  * sCommunity\n           + w.geo        * sGeo\n           + w.recency    * sRecency ) AS matchScore\nORDER BY matchScore DESC, size(mutuals) DESC, c.userId\nLIMIT 10   // top-K (LIMIT must be a literal or $param)\n\nRETURN c.userId                       AS userId,\n       c.username                     AS username,\n       c.name                         AS name,\n       size(mutuals)                  AS mutualFriendCount,\n       [x IN mutuals | x.name][..3]   AS mutualFriends,\n       [x IN shared  | x.name]        AS sharedInterests,\n       sharedGroups + sharedOrgs      AS sharedContext,\n       round(distanceKm, 1)           AS distanceKm,\n       round(matchScore, 1)           AS matchScore,\n       { structural: round(sStructural, 3), interest: round(sInterest, 3),\n         community:  round(sCommunity, 3),  geo:      round(sGeo, 3),\n         recency:    round(sRecency, 3) } AS breakdown,\n       // human-readable explanation for the UI badge (strongest signal first)\n       CASE\n         WHEN size(mutuals) > 1  THEN toString(size(mutuals)) + ' mutual friends'\n         WHEN size(mutuals) = 1  THEN 'Friends with ' + mutuals[0].name\n         WHEN size(shared) > 0   THEN 'Also into ' + shared[0].name\n         WHEN size(sharedGroups) > 0 THEN 'Both in ' + sharedGroups[0]\n         WHEN size(sharedOrgs) > 0   THEN 'Both at ' + sharedOrgs[0]\n         WHEN distanceKm IS NOT NULL AND distanceKm < 1 THEN 'Lives in your city'\n         ELSE 'Similar network'\n       END AS reason;\n","04_recommend_cold_start.cypher":"// =====================================================================\n// 04_recommend_cold_start.cypher - QUERY 2: fallback for users with 0 friends\n// Requires Neo4j >= 5.23.   Neo4j Browser:  :param userId => 'U16'\n//\n// A new user has no edges, so Adamic-Adar / triadic closure are all 0.\n// We switch from \"who do your friends know\" to \"who looks like you\":\n//\n// match_score = 100 * ( 0.45 * S_interest   weighted Jaccard (onboarding interests)\n//                     + 0.20 * S_context    shared group / school / workplace\n//                     + 0.20 * S_geo        exp(-km / 50)\n//                     + 0.15 * S_social )   \"good first friend\" prior:\n//                                           connectedness x recent activity\n//\n// Degradation ladder - each candidate branch fires only if data exists:\n//   interests -> groups/org -> same city -> (nothing at all) active users globally\n// Final step: DIVERSITY RE-RANK - at most 2 people per Louvain community,\n// so a newcomer isn't shown 10 people from the same clique.\n// =====================================================================\n\nWITH {interest: 0.45, context: 0.20, geo: 0.20, social: 0.15} AS w,\n     200         AS maxHubDegree,\n     2           AS perCommunityCap,\n     50.0        AS geoScaleKm,\n     30.0        AS activityHalfLifeDays,\n     datetime()  AS now\n\nMATCH (me:User {userId: $userId})\nOPTIONAL MATCH (me)-[:LIVES_IN]->(myPlace:Place)\nWITH w, maxHubDegree, perCommunityCap, geoScaleKm, activityHalfLifeDays, now,\n     me, myPlace,\n     reduce(t = 0.0, x IN [(me)-[r:INTERESTED_IN]->() | r.weight] | t + x) AS myInterestMass\n\n// ---------- Stage 1: candidates from profile signals only ----------\nCALL (me, myPlace, maxHubDegree) {\n  MATCH (me)-[:INTERESTED_IN]->(i:Interest)<-[:INTERESTED_IN]-(c:User)\n  WHERE COUNT { (i)<-[:INTERESTED_IN]-() } <= maxHubDegree\n  RETURN c\n  UNION\n  MATCH (me)-[:MEMBER_OF|WORKS_AT|STUDIED_AT]->(ctx)<-[:MEMBER_OF|WORKS_AT|STUDIED_AT]-(c:User)\n  WHERE COUNT { (ctx)<--() } <= maxHubDegree\n  RETURN c\n  UNION\n  MATCH (myPlace)<-[:LIVES_IN]-(c:User)\n  RETURN c ORDER BY c.lastActiveAt DESC LIMIT 50\n  UNION\n  // last resort for a completely empty profile: recently active, non-celebrity users.\n  // ORDER BY + LIMIT is served by the user_last_active range index (no full sort).\n  MATCH (c:User)\n  WHERE c.lastActiveAt IS NOT NULL\n    AND 1 <= COUNT { (c)-[:FRIENDS_WITH]-() } <= maxHubDegree\n  RETURN c ORDER BY c.lastActiveAt DESC LIMIT 50\n}\nWITH DISTINCT w, perCommunityCap, geoScaleKm, activityHalfLifeDays, now,\n     me, myPlace, myInterestMass, c\nWHERE c <> me\n  AND coalesce(c.isActive, true)\n  AND NOT (me)-[:FRIENDS_WITH]-(c)\n  AND NOT (me)-[:BLOCKED]-(c)\n\n// ---------- Stage 2: features ----------\nOPTIONAL MATCH (c)-[:LIVES_IN]->(theirPlace:Place)\nWITH w, perCommunityCap, geoScaleKm, activityHalfLifeDays, now, myInterestMass, c,\n     [(me)-[r1:INTERESTED_IN]->(i:Interest)<-[r2:INTERESTED_IN]-(c) |\n        { name: i.name,\n          overlap: CASE WHEN r1.weight < r2.weight THEN r1.weight ELSE r2.weight END }] AS shared,\n     reduce(t = 0.0, x IN [(c)-[r:INTERESTED_IN]->() | r.weight] | t + x)          AS theirInterestMass,\n     [(me)-[:MEMBER_OF|WORKS_AT|STUDIED_AT]->(ctx)<-[:MEMBER_OF|WORKS_AT|STUDIED_AT]-(c) | ctx.name] AS sharedContext,\n     CASE WHEN myPlace IS NULL OR theirPlace IS NULL THEN null\n          ELSE point.distance(myPlace.location, theirPlace.location) / 1000.0 END AS distanceKm,\n     COUNT { (c)-[:FRIENDS_WITH]-() }                                              AS degree,\n     duration.inDays(coalesce(c.lastActiveAt, c.joinedAt, now), now).days          AS inactiveDays\n\nWITH w, perCommunityCap, c, shared, sharedContext, distanceKm, degree,\n     reduce(s = 0.0, x IN shared | s + x.overlap) AS overlapMass,\n     myInterestMass + theirInterestMass           AS totalInterestMass,\n     geoScaleKm, activityHalfLifeDays, inactiveDays\n\nWITH w, perCommunityCap, c, shared, sharedContext, distanceKm, degree,\n     CASE WHEN totalInterestMass - overlapMass > 0\n          THEN overlapMass / (totalInterestMass - overlapMass) ELSE 0.0 END AS sInterest,\n     1 - exp(-0.6 * size(sharedContext))                                   AS sContext,\n     CASE WHEN distanceKm IS NULL THEN 0.0 ELSE exp(-distanceKm / geoScaleKm) END AS sGeo,\n     // connectedness saturates at ~5 friends (d/(d+5)) so celebrities get no extra boost\n     (toFloat(degree) / (degree + 5)) * 0.5 ^ (inactiveDays / activityHalfLifeDays) AS sSocial\n\nWITH perCommunityCap, c, shared, sharedContext, distanceKm, degree,\n     sInterest, sContext, sGeo, sSocial,\n     100 * ( w.interest * sInterest + w.context * sContext\n           + w.geo      * sGeo      + w.social  * sSocial ) AS matchScore\n\n// ---------- Diversity re-rank: cap per community ----------\n// (falls back to the user's own id when Louvain hasn't run => no capping)\nORDER BY matchScore DESC, c.userId\nWITH perCommunityCap, coalesce(toString(c.communityId), c.userId) AS bucket,\n     collect({ c: c, shared: shared, sharedContext: sharedContext, distanceKm: distanceKm,\n               degree: degree, matchScore: matchScore,\n               breakdown: { interest: round(sInterest, 3), context: round(sContext, 3),\n                            geo: round(sGeo, 3), social: round(sSocial, 3) } }) AS ranked\nUNWIND ranked[..perCommunityCap] AS rec\nWITH rec\nORDER BY rec.matchScore DESC, rec.c.userId\nLIMIT 10   // top-K (LIMIT must be a literal or $param)\n\nRETURN rec.c.userId                      AS userId,\n       rec.c.username                    AS username,\n       rec.c.name                        AS name,\n       0                                 AS mutualFriendCount,\n       []                                AS mutualFriends,\n       [x IN rec.shared | x.name]        AS sharedInterests,\n       rec.sharedContext                 AS sharedContext,\n       round(rec.distanceKm, 1)          AS distanceKm,\n       round(rec.matchScore, 1)          AS matchScore,\n       rec.breakdown                     AS breakdown,\n       CASE\n         WHEN size(rec.shared) > 1        THEN 'Also into ' + rec.shared[0].name + ' & ' + rec.shared[1].name\n         WHEN size(rec.shared) = 1        THEN 'Also into ' + rec.shared[0].name\n         WHEN size(rec.sharedContext) > 0 THEN 'Both at ' + rec.sharedContext[0]\n         WHEN rec.distanceKm IS NOT NULL AND rec.distanceKm < 1 THEN 'Lives in your city'\n         ELSE 'Active in the community'\n       END                               AS reason;\n","05_gds.cypher":"// =====================================================================\n// 05_gds.cypher - offline Graph Data Science batch job\n// Requires the GDS plugin (Neo4j Desktop: DBMS -> Plugins -> Graph Data Science).\n// Run nightly (or after a bulk import). Its outputs are plain properties /\n// relationships that 03 and 04 read with coalesce(), so the online queries\n// still work - just with fewer signals - if this job has never run.\n//\n//   Louvain  -> User.communityId     (community proximity + diversity re-rank)\n//   FastRP   -> User.embedding       (64-d structural+attribute embedding)\n//   kNN      -> (:User)-[:SIMILAR_TO {score}]->(:User)   (top-5 cosine neighbours)\n// =====================================================================\n\n// ---------- 0. Clean previous run ----------\nCALL gds.graph.drop('social', false) YIELD graphName RETURN graphName;\nCALL gds.graph.drop('socialHetero', false) YIELD graphName RETURN graphName;\nMATCH ()-[s:SIMILAR_TO]->() DELETE s;\n\n// ---------- 1. Louvain on the friendship graph ----------\n// UNDIRECTED: friendship is symmetric even though we store one arrow.\nCALL gds.graph.project(\n  'social',\n  'User',\n  { FRIENDS_WITH: { orientation: 'UNDIRECTED',\n                    properties: { strength: { defaultValue: 0.5 } } } }\n) YIELD graphName, nodeCount, relationshipCount\nRETURN graphName, nodeCount, relationshipCount;\n\n// Memory estimate first - a production habit worth showing an examiner\nCALL gds.louvain.write.estimate('social', { writeProperty: 'communityId' })\nYIELD requiredMemory RETURN requiredMemory;\n\nCALL gds.louvain.write('social', {\n  relationshipWeightProperty: 'strength',\n  writeProperty: 'communityId',\n  includeIntermediateCommunities: false\n}) YIELD communityCount, modularity, ranLevels\nRETURN communityCount, round(modularity, 3) AS modularity, ranLevels;\n\n// ---------- 2. FastRP on a HETEROGENEOUS graph ----------\n// Users + Interests + Groups + Places. Including attribute nodes is what lets\n// a user with ZERO friends still get a meaningful embedding (via interests/city).\nCALL gds.graph.project(\n  'socialHetero',\n  ['User', 'Interest', 'Group', 'Place'],\n  {\n    FRIENDS_WITH:  { orientation: 'UNDIRECTED', properties: { weight: { property: 'strength', defaultValue: 0.5 } } },\n    INTERESTED_IN: { orientation: 'UNDIRECTED', properties: { weight: { property: 'weight',   defaultValue: 0.5 } } },\n    MEMBER_OF:     { orientation: 'UNDIRECTED', properties: { weight: { property: 'weight',   defaultValue: 0.6 } } },\n    LIVES_IN:      { orientation: 'UNDIRECTED', properties: { weight: { property: 'weight',   defaultValue: 0.3 } } }\n  }\n) YIELD graphName, nodeCount, relationshipCount\nRETURN graphName, nodeCount, relationshipCount;\n\nCALL gds.fastRP.mutate('socialHetero', {\n  embeddingDimension: 64,\n  iterationWeights: [0.0, 1.0, 1.0, 0.5],   // ignore self, weight 1-3 hop neighbourhoods\n  relationshipWeightProperty: 'weight',\n  randomSeed: 42,\n  mutateProperty: 'embedding'\n}) YIELD nodePropertiesWritten\nRETURN nodePropertiesWritten;\n\n// ---------- 3. kNN over embeddings -> SIMILAR_TO ----------\nCALL gds.knn.write('socialHetero', {\n  nodeLabels: ['User'],\n  nodeProperties: { embedding: 'COSINE' },\n  topK: 5,\n  // FastRP cosines are compressed on small dense graphs (p10..p90 = 0.85..0.97 here),\n  // so tune the cutoff to ~the median of similarityDistribution, not a textbook 0.5\n  similarityCutoff: 0.9,\n  randomSeed: 42, concurrency: 1,            // deterministic for demos\n  writeRelationshipType: 'SIMILAR_TO',\n  writeProperty: 'score'\n}) YIELD relationshipsWritten, similarityDistribution\nRETURN relationshipsWritten, similarityDistribution.mean AS meanSimilarity;\n\n// Persist embeddings too, for the vector index below\nCALL gds.graph.nodeProperties.write('socialHetero', ['embedding'], ['User'])\nYIELD propertiesWritten RETURN propertiesWritten;\n\n// ---------- 4. Vector index (Neo4j >= 5.13): online ANN lookup ----------\nCREATE VECTOR INDEX user_embedding IF NOT EXISTS\nFOR (u:User) ON (u.embedding)\nOPTIONS { indexConfig: { `vector.dimensions`: 64, `vector.similarity_function`: 'cosine' } };\n\n// ---------- 5. Free projection memory ----------\nCALL gds.graph.drop('social', false) YIELD graphName RETURN graphName;\nCALL gds.graph.drop('socialHetero', false) YIELD graphName RETURN graphName;\n\n// =====================================================================\n// Inspection queries (run individually in Browser)\n// =====================================================================\n// Communities:\n//   MATCH (u:User) RETURN u.communityId AS community, collect(u.name) AS members ORDER BY community;\n//\n// Embedding neighbours of a user (ANN via the vector index, no SIMILAR_TO needed):\n//   MATCH (me:User {userId: $userId})\n//   CALL db.index.vector.queryNodes('user_embedding', 6, me.embedding) YIELD node, score\n//   WHERE node <> me\n//   RETURN node.name, round(score, 3) AS cosine;\n"};
+
+(() => {
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmt = (x, d = 1) => (Math.round(x * 10 ** d) / 10 ** d).toFixed(d);
+  const NS = "http://www.w3.org/2000/svg";
+
+  const FACTORS = {
+    structural: { name: "Structural", color: "--f-structural" },
+    interest: { name: "Interest", color: "--f-interest" },
+    community: { name: "Community", color: "--f-community" },
+    context: { name: "Context", color: "--f-community" },
+    geo: { name: "Geo", color: "--f-geo" },
+    recency: { name: "Recency", color: "--f-recency" },
+    social: { name: "Social", color: "--f-recency" },
+  };
+  const DEFS = {
+    hybrid: {
+      structural: ["1 - e^(-AA / 1.5)", "Adamic-Adar over mutual friends. A friend with 3 friends is far stronger evidence than one with 3,000, and the square root of both tie strengths weakens a path with one weak link."],
+      interest: ["sum(min) / sum(max)", "Weighted Jaccard over interest weights. Rewards overlap and penalises large non-overlapping profiles."],
+      community: ["1 - e^-(0.6 groups + 0.6 orgs + 0.4 louvain)", "Same group, school or employer, plus the Louvain community when GDS has run."],
+      geo: ["e^(-km / 50)", "Same city scores 1.0. Vellore to Chennai, 125 km, scores 0.08."],
+      recency: ["half-life decay", "Half from the freshest two-hop path (90-day half-life, a path is as fresh as its stalest edge), half from the candidate's last activity (30 days)."],
+    },
+    cold: {
+      interest: ["sum(min) / sum(max)", "Onboarding interests carry the most weight when there is no network to read."],
+      context: ["1 - e^(-0.6 shared)", "Shared group, school or employer."],
+      geo: ["e^(-km / 50)", "People nearby are easier first connections."],
+      social: ["d / (d + 5) x activity", "A good first friend is connected and recently active. Saturates near 5 friends so celebrities get no extra boost."],
+    },
+  };
+
+  /* ---------- state ---------- */
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const state = {
+    me: "U01",
+    gds: false,
+    friendships: clone(SEED_FRIENDSHIPS),
+    raw: clone(DEFAULT_WEIGHTS),
+    open: null,
+    hot: null,
+    newEdge: null,
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem("fgr-weights") || "null");
+    if (saved && saved.hybrid && saved.cold) state.raw = saved;
+  } catch (e) { /* storage unavailable: defaults are fine */ }
+
+  const normalise = (w) => {
+    const sum = Object.values(w).reduce((s, x) => s + x, 0);
+    return Object.fromEntries(Object.entries(w).map(([k, x]) => [k, sum > 0 ? x / sum : 1 / Object.keys(w).length]));
+  };
+  let G = makeGraph(state.friendships);
+  let rec = null;
+  const userById = Object.fromEntries(USERS.map((u) => [u.id, u]));
+  const initials = (n) => n.slice(0, 2).toUpperCase();
+
+  function compute() {
+    G = makeGraph(state.friendships);
+    rec = recommend(G, state.me, { hybrid: normalise(state.raw.hybrid), cold: normalise(state.raw.cold) }, state.gds);
+  }
+
+  /* ---------- graph: small hand-rolled force layout ---------- */
+  const svg = $("#graph");
+  const W = 640, H = 500;
+  const nodes = USERS.map((u, i) => {
+    const a = (i / USERS.length) * Math.PI * 2;
+    return { id: u.id, x: W / 2 + Math.cos(a) * 170, y: H / 2 + Math.sin(a) * 150, vx: 0, vy: 0, fixed: false };
+  });
+  const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  let alpha = 1;
+
+  function tick() {
+    const links = state.friendships;
+    for (const l of links) {
+      const a = nodeById[l.a], b = nodeById[l.b];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+      const k = ((d - 112) / d) * 0.05 * alpha;
+      a.vx += dx * k; a.vy += dy * k; b.vx -= dx * k; b.vy -= dy * k;
+    }
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy || 1;
+      const f = (7600 / d2) * alpha, d = Math.sqrt(d2);
+      a.vx -= (dx / d) * f; a.vy -= (dy / d) * f; b.vx += (dx / d) * f; b.vy += (dy / d) * f;
+      if (d < 64) { const p = (64 - d) / 2; a.x -= (dx / d) * p; a.y -= (dy / d) * p; b.x += (dx / d) * p; b.y += (dy / d) * p; }
+    }
+    for (const n of nodes) {
+      n.vx += (W / 2 - n.x) * 0.005 * alpha; n.vy += (H / 2 - n.y) * 0.008 * alpha;
+      if (!n.fixed) { n.x += n.vx; n.y += n.vy; }
+      n.vx *= 0.55; n.vy *= 0.55;
+      n.x = Math.max(40, Math.min(W - 40, n.x)); n.y = Math.max(44, Math.min(H - 40, n.y));
+    }
+    alpha *= 0.985;
+  }
+
+  const layer = (cls) => { const g = document.createElementNS(NS, "g"); g.setAttribute("class", cls); svg.appendChild(g); return g; };
+  const gHull = layer("hulls"), gEdge = layer("edges"), gSuggest = layer("suggests"), gNode = layer("nodes");
+  const nodeEls = {};
+  for (const u of USERS) {
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "node"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `Recommend for ${u.name}, ${PLACES[u.place].name}`);
+    g.innerHTML = `<circle r="15"></circle><text class="initial" y="0" text-anchor="middle">${initials(u.name)}</text><text y="30">${esc(u.name)}</text><g class="badge" style="display:none"><circle class="rank-dot" cx="12" cy="-12" r="8"></circle><text class="rank" x="12" y="-12"></text></g>`;
+    g.addEventListener("click", () => { if (!dragMoved) select(u.id); });
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(u.id); } });
+    g.addEventListener("pointerdown", (e) => startDrag(e, u.id));
+    g.addEventListener("pointerenter", () => setHot(u.id));
+    g.addEventListener("pointerleave", () => setHot(null));
+    gNode.appendChild(g);
+    nodeEls[u.id] = g;
+  }
+
+  let drag = null, dragMoved = false;
+  function svgPoint(e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function startDrag(e, id) {
+    drag = { id, sx: e.clientX, sy: e.clientY }; dragMoved = false;
+    nodeById[id].fixed = true; svg.setPointerCapture(e.pointerId);
+  }
+  svg.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 4) dragMoved = true;
+    if (!dragMoved) return;
+    const p = svgPoint(e), n = nodeById[drag.id];
+    n.x = p.x; n.y = p.y; alpha = Math.max(alpha, 0.25); kick();
+  });
+  const endDrag = () => { if (drag) { nodeById[drag.id].fixed = false; drag = null; setTimeout(() => (dragMoved = false), 0); } };
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+
+  function hullPath(pts) {
+    if (pts.length === 1) return `M${pts[0].x},${pts[0].y}Z`;
+    if (pts.length === 2) return `M${pts[0].x},${pts[0].y}L${pts[1].x},${pts[1].y}Z`;
+    const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [], upper = [];
+    for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+    for (const q of [...p].reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+    const h = lower.slice(0, -1).concat(upper.slice(0, -1));
+    return "M" + h.map((q) => `${q.x},${q.y}`).join("L") + "Z";
+  }
+
+  function draw() {
+    const comms = {};
+    for (const n of nodes) (comms[LOUVAIN[n.id]] ||= []).push(n);
+    gHull.innerHTML = Object.entries(comms).map(([c, pts]) => {
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, top = Math.min(...pts.map((p) => p.y));
+      return `<path class="hull" d="${hullPath(pts)}" stroke-width="58"></path><text class="hull-label" x="${cx}" y="${top - 34}" text-anchor="middle">C${c}</text>`;
+    }).join("");
+
+    const hot = state.hot;
+    const pathEdges = new Set();
+    if (hot && rec) {
+      const r = rec.results.find((x) => x.id === hot);
+      if (r) for (const m of r.mutuals) { pathEdges.add(G.tie(state.me, m.id)); pathEdges.add(G.tie(m.id, hot)); }
+    }
+    gEdge.innerHTML = "";
+    for (const f of state.friendships) {
+      const a = nodeById[f.a], b = nodeById[f.b];
+      const line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", a.x); line.setAttribute("y1", a.y); line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+      line.setAttribute("stroke-width", (1 + f.strength * 3.2).toFixed(2));
+      line.setAttribute("opacity", (0.3 + 0.7 * 0.5 ** (f.last / 90)).toFixed(2));
+      let cls = "edge";
+      if (f.a === state.me || f.b === state.me) cls += " mine";
+      if (pathEdges.has(f)) cls += " path";
+      if (f === state.newEdge) cls += " new";
+      line.setAttribute("class", cls);
+      gEdge.appendChild(line);
+    }
+
+    gSuggest.innerHTML = "";
+    if (rec) {
+      const me = nodeById[state.me];
+      rec.results.slice(0, 3).forEach((r) => {
+        const c = nodeById[r.id];
+        const mx = (me.x + c.x) / 2, my = (me.y + c.y) / 2, dx = c.x - me.x, dy = c.y - me.y;
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", `M${me.x},${me.y} Q${mx - dy * 0.18},${my + dx * 0.18} ${c.x},${c.y}`);
+        path.setAttribute("class", "suggest");
+        gSuggest.appendChild(path);
+      });
+    }
+
+    for (const n of nodes) nodeEls[n.id].setAttribute("transform", `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+  }
+
+  let raf = null;
+  function loop() { tick(); draw(); raf = alpha > 0.02 || drag ? requestAnimationFrame(loop) : null; }
+  function kick() { if (reduceMotion) { for (let i = 0; i < 300; i++) tick(); draw(); return; } if (!raf) raf = requestAnimationFrame(loop); }
+
+  function paintNodes() {
+    const friends = new Set(G.adj[state.me].map((n) => n.other));
+    const ranks = Object.fromEntries(rec.results.map((r, i) => [r.id, i + 1]));
+    for (const u of USERS) {
+      const el = nodeEls[u.id];
+      el.classList.toggle("me", u.id === state.me);
+      el.classList.toggle("friend", friends.has(u.id));
+      el.classList.toggle("rec", !!ranks[u.id]);
+      el.classList.toggle("dim", u.id !== state.me && !friends.has(u.id) && !ranks[u.id]);
+      el.classList.toggle("focus", u.id === state.hot);
+      const badge = el.querySelector(".badge");
+      badge.style.display = ranks[u.id] && ranks[u.id] <= 3 ? "" : "none";
+      if (ranks[u.id]) badge.querySelector(".rank").textContent = ranks[u.id];
+    }
+    svg.classList.toggle("gds", state.gds);
+  }
+
+  /* ---------- readout ---------- */
+  const keysFor = () => Object.keys(rec.strategy === "cold" ? DEFAULT_WEIGHTS.cold : DEFAULT_WEIGHTS.hybrid);
+  const wNow = () => normalise(rec.strategy === "cold" ? state.raw.cold : state.raw.hybrid);
+
+  function evidence(r, k) {
+    const me = userById[state.me];
+    switch (k) {
+      case "structural":
+        return r.mutuals.length
+          ? r.mutuals.map((m) => `${m.name}: &radic;(${m.s1} &times; ${m.s2}) / ln ${m.degree} = ${fmt(m.aa, 3)}`).join("<br>") + `<br>AA = ${fmt(r.aa, 3)}`
+          : "No mutual friends";
+      case "interest":
+        return r.shared.length
+          ? `${r.shared.map((s) => esc(s.name)).join(", ")}<br>overlap ${fmt(r.jac.overlap, 2)} of ${fmt(r.jac.overlap / r.jac.value, 2)} combined weight`
+          : "No shared interests";
+      case "community":
+      case "context": {
+        const bits = [...r.sharedContext];
+        if (r.sameCommunity) bits.push("same Louvain community");
+        return bits.length ? esc(bits.join(", ")) : "Nothing shared";
+      }
+      case "geo":
+        return `${fmt(r.km, 1)} km, ${PLACES[userById[r.id].place].name}`;
+      case "recency":
+        return `${r.mutuals.length ? `freshest path ${r.freshest} d` : "no path"}, active ${userById[r.id].active} d ago`;
+      case "social":
+        return `${r.degree} friends, active ${userById[r.id].active} d ago`;
+    }
+    return "";
+  }
+
+  function whyTable(r) {
+    const w = wNow();
+    const rows = keysFor().map((k) => `<tr>
+      <td><span class="sw" style="background:var(${FACTORS[k].color})"></span> ${FACTORS[k].name}</td>
+      <td class="ev">${evidence(r, k)}</td>
+      <td class="n">${fmt(r.s[k], 3)}</td>
+      <td class="n">${Math.round(w[k] * 100)}%</td>
+      <td class="n">${fmt(100 * w[k] * r.s[k], 1)}</td></tr>`).join("");
+    return `<table><thead><tr><th>Factor</th><th>Evidence</th><th class="n">S</th><th class="n">Weight</th><th class="n">Points</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td colspan="4">Match score</td><td class="n">${fmt(r.score, 1)}</td></tr></tfoot></table>`;
+  }
+
+  function bar(r) {
+    const w = wNow();
+    return keysFor().map((k) => {
+      const pts = 100 * w[k] * r.s[k];
+      return `<i style="width:${pts.toFixed(2)}%;background:var(${FACTORS[k].color})" title="${FACTORS[k].name}: ${fmt(pts, 1)} points"></i>`;
+    }).join("");
+  }
+
+  function renderResults() {
+    const list = $("#results");
+    const before = {};
+    list.querySelectorAll(".result").forEach((li) => (before[li.dataset.id] = li.getBoundingClientRect().top));
+    if (!rec.results.length) {
+      list.innerHTML = `<li class="empty">Nobody left to suggest. Everyone reachable is already a friend.</li>`;
+      return;
+    }
+    list.innerHTML = rec.results.map((r, i) => {
+      const u = userById[r.id];
+      const open = state.open === r.id;
+      return `<li class="result${state.hot === r.id ? " hot" : ""}" data-id="${r.id}">
+        <div class="r-top">
+          <span class="r-rank num">${i + 1}</span>
+          <span class="avatar" aria-hidden="true">${initials(u.name)}</span>
+          <span class="r-name"><b>${esc(u.name)}</b><small>@${esc(u.username)}</small><span class="r-reason">${esc(r.reason)}</span></span>
+          <span class="r-score num" aria-label="Match score ${fmt(r.score)}">${fmt(r.score)}<small>/100</small></span>
+        </div>
+        <div class="bar" role="img" aria-label="Score breakdown">${bar(r)}</div>
+        <div class="r-actions">
+          <button class="btn" type="button" data-why="${r.id}" aria-expanded="${open}">${open ? "Hide why" : "Why"}</button>
+          <button class="btn primary" type="button" data-connect="${r.id}">Connect</button>
+        </div>
+        ${open ? `<div class="why table-scroll">${whyTable(r)}</div>` : ""}
+      </li>`;
+    }).join("");
+
+    if (reduceMotion) return;
+    list.querySelectorAll(".result").forEach((li, i) => {
+      const prev = before[li.dataset.id];
+      const now = li.getBoundingClientRect().top;
+      if (prev != null && Math.abs(prev - now) > 1) {
+        li.animate([{ transform: `translateY(${prev - now}px)` }, { transform: "none" }], { duration: 320, easing: "cubic-bezier(0.2,0,0,1)" });
+      } else if (prev == null) {
+        li.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: Math.min(i * 28, 250), easing: "cubic-bezier(0.05,0.7,0.1,1)", fill: "backwards" });
+      }
+    });
+  }
+
+  function renderMeta() {
+    const me = userById[state.me];
+    const friends = G.deg(state.me);
+    const pill = $("#strategy");
+    pill.textContent = rec.strategy === "cold" ? `Cold start, ${friends} friends` : `Hybrid, ${friends} friend${friends === 1 ? "" : "s"}`;
+    pill.classList.toggle("cold", rec.strategy === "cold");
+    $("#legend").innerHTML = keysFor().map((k) => `<span><i class="sw" style="background:var(${FACTORS[k].color})"></i>${FACTORS[k].name}</span>`).join("");
+    const note = $("#note");
+    if (rec.strategy === "cold" && rec.held && rec.held.length && state.gds) {
+      note.hidden = false;
+      note.innerHTML = `Held back by the diversity cap (2 per community): ${rec.held.map((id) => esc(userById[id].name)).join(", ")}.`;
+    } else if (rec.strategy === "cold" && !state.gds) {
+      note.hidden = false;
+      note.textContent = "Turn on Louvain communities to apply the diversity cap of 2 per community.";
+    } else note.hidden = true;
+    $("#reset-net").hidden = state.friendships.length === SEED_FRIENDSHIPS.length;
+
+    const who = $("#who");
+    if (who.textContent !== me.name) {
+      if (reduceMotion) who.textContent = me.name;
+      else { who.classList.add("swap"); setTimeout(() => { who.textContent = me.name; who.classList.remove("swap"); }, 160); }
+    }
+    $("#person").value = state.me;
+    $("#flow-who").textContent = me.name;
+  }
+
+  function renderWeights() {
+    const mode = rec.strategy === "cold" ? "cold" : "hybrid";
+    $("#weights-title").textContent = mode === "cold" ? "Cold-start weights" : "Hybrid weights";
+    const box = $("#weights");
+    if (box.dataset.mode !== mode) {
+      box.dataset.mode = mode;
+      box.innerHTML = Object.keys(state.raw[mode]).map((k) => `<div class="weight">
+          <label for="w-${k}"><i class="sw" style="background:var(${FACTORS[k].color})"></i>${FACTORS[k].name}</label>
+          <input type="range" id="w-${k}" min="0" max="100" step="1" value="${Math.round(state.raw[mode][k] * 100)}" data-k="${k}">
+          <output class="num" id="o-${k}" for="w-${k}"></output></div>`).join("");
+      box.querySelectorAll("input").forEach((inp) => inp.addEventListener("input", () => {
+        state.raw[mode][inp.dataset.k] = Number(inp.value) / 100;
+        try { localStorage.setItem("fgr-weights", JSON.stringify(state.raw)); } catch (e) {}
+        update();
+      }));
+    }
+    const w = normalise(state.raw[mode]);
+    for (const k of Object.keys(w)) {
+      $(`#o-${k}`).textContent = `${Math.round(w[k] * 100)}%`;
+      $(`#w-${k}`).value = Math.round(state.raw[mode][k] * 100);
+    }
+  }
+
+  function renderScoring() {
+    const mode = rec.strategy === "cold" ? "cold" : "hybrid";
+    const w = normalise(state.raw[mode]);
+    const keys = Object.keys(w);
+    $("#formula").innerHTML = "match_score = 100 &times; (" + keys.map((k, i) =>
+      `${i ? "\n                   + " : " "}${w[k].toFixed(2)} &times; <span class="t"><i class="sw" style="background:var(${FACTORS[k].color})"></i>S_${k}</span>`).join("") + " )";
+    $("#factor-defs").innerHTML = keys.map((k) => `<div class="factor"><i class="sw" style="background:var(${FACTORS[k].color})"></i>
+      <h3>${FACTORS[k].name} <code>${esc(DEFS[mode][k][0])}</code></h3><p>${esc(DEFS[mode][k][1])}</p></div>`).join("");
+    const top = rec.results[0];
+    if (top) {
+      $("#worked-title").textContent = `${userById[state.me].name} and ${userById[top.id].name}`;
+      $("#worked-score").textContent = fmt(top.score);
+      $("#worked").innerHTML = whyTable(top);
+    }
+  }
+
+  function renderPipeline() {
+    $("#branches").innerHTML = Object.entries(rec.counts).map(([name, n]) =>
+      `<div class="branch"><span>${esc(name)}</span><span class="num">${n}</span></div>`).join("") +
+      (rec.strategy === "hybrid" ? `<div class="branch"><span>GDS kNN neighbours</span><span class="num muted">batch</span></div>` : "");
+    $("#pool").textContent = rec.poolSize;
+    $("#topk").textContent = rec.results.length;
+  }
+
+  function update() {
+    compute();
+    renderMeta(); renderWeights(); renderResults(); renderScoring(); renderPipeline(); paintNodes(); draw();
+  }
+
+  function select(id) {
+    if (id === state.me) return;
+    state.me = id; state.open = null; state.hot = null;
+    update();
+  }
+  function setHot(id) {
+    if (state.hot === id) return;
+    state.hot = id;
+    paintNodes(); draw();
+    document.querySelectorAll(".result").forEach((li) => li.classList.toggle("hot", li.dataset.id === id));
+  }
+
+  /* ---------- wiring ---------- */
+  $("#person").innerHTML = USERS.map((u) => `<option value="${u.id}">${esc(u.name)} (${PLACES[u.place].name}${u.id === "U16" ? ", new account" : ""})</option>`).join("");
+  $("#person").addEventListener("change", (e) => select(e.target.value));
+  $("#gds").addEventListener("change", (e) => { state.gds = e.target.checked; update(); });
+  $("#reset-weights").addEventListener("click", () => {
+    state.raw = clone(DEFAULT_WEIGHTS); $("#weights").dataset.mode = "";
+    try { localStorage.removeItem("fgr-weights"); } catch (e) {}
+    update();
+  });
+  $("#reset-net").addEventListener("click", () => {
+    state.friendships = clone(SEED_FRIENDSHIPS); state.newEdge = null; alpha = 0.5; update(); kick();
+  });
+  $("#results").addEventListener("click", (e) => {
+    const why = e.target.closest("[data-why]");
+    if (why) { state.open = state.open === why.dataset.why ? null : why.dataset.why; renderResults(); return; }
+    const con = e.target.closest("[data-connect]");
+    if (con) {
+      const f = { a: state.me, b: con.dataset.connect, strength: 0.5, interactions: 0, since: 0, last: 0 };
+      state.friendships.push(f); state.newEdge = f; state.open = null;
+      alpha = Math.max(alpha, 0.35); update(); kick();
+    }
+  });
+  $("#results").addEventListener("pointerover", (e) => { const li = e.target.closest(".result"); if (li) setHot(li.dataset.id); });
+  $("#results").addEventListener("pointerleave", () => setHot(null));
+
+  /* cypher viewer */
+  const KW = /\b(MATCH|OPTIONAL|WHERE|WITH|RETURN|CALL|UNION|ORDER|BY|LIMIT|DESC|ASC|AS|AND|OR|NOT|IS|NULL|CASE|WHEN|THEN|ELSE|END|DISTINCT|UNWIND|MERGE|SET|CREATE|DELETE|DETACH|FOREACH|IN|ON|FOR|REQUIRE|UNIQUE|INDEX|CONSTRAINT|IF|EXISTS|COUNT|YIELD|OPTIONS|FULLTEXT|POINT|VECTOR|EACH|true|false)\b/;
+  function highlight(src) {
+    const re = new RegExp(String.raw`(\/\/[^\n]*)|('(?:[^'\\\n]|\\.)*')|(\$\w+)|` + KW.source, "g");
+    let out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      const cls = m[1] ? "cm" : m[2] ? "st" : m[3] ? "pr" : "kw";
+      out += `<span class="${cls}">${esc(m[0])}</span>`;
+      last = re.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+  const FILES = Object.keys(CYPHER);
+  const DESC = {
+    "01_schema.cypher": "Constraints and indexes, idempotent.",
+    "02_seed.cypher": "The 16-person network shown in the demo.",
+    "03_recommend_hybrid.cypher": "Query 1, the weighted multi-factor recommender.",
+    "04_recommend_cold_start.cypher": "Query 2, the cold-start fallback with diversity re-ranking.",
+    "05_gds.cypher": "Offline batch job: Louvain, FastRP, kNN, vector index.",
+  };
+  let current = "03_recommend_hybrid.cypher";
+  $("#tabs").innerHTML = FILES.map((f) => `<button class="tab" role="tab" type="button" id="tab-${f.slice(0, 2)}" data-file="${f}" aria-selected="${f === current}">${f}</button>`).join("");
+  function showFile(f) {
+    current = f;
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", t.dataset.file === f));
+    $("#code").innerHTML = highlight(CYPHER[f]);
+    $("#code-desc").textContent = DESC[f] || "";
+    $("#code").scrollTop = 0;
+  }
+  $("#tabs").addEventListener("click", (e) => { const t = e.target.closest(".tab"); if (t) showFile(t.dataset.file); });
+  $("#copy").addEventListener("click", async () => {
+    const btn = $("#copy");
+    try { await navigator.clipboard.writeText(CYPHER[current]); btn.textContent = "Copied"; }
+    catch (e) {
+      const range = document.createRange(); range.selectNodeContents($("#code"));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      btn.textContent = "Selected, press Ctrl+C";
+    }
+    setTimeout(() => (btn.textContent = "Copy"), 1800);
+  });
+
+  showFile(current);
+  update();
+  if (reduceMotion) kick(); else { for (let i = 0; i < 60; i++) tick(); alpha = 0.6; kick(); }
+})();
+</script>
+
+</body>
+</html>

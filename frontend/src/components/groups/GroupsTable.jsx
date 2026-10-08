@@ -1,141 +1,110 @@
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { LogOut, PlusCircle, Loader2, InfoIcon, Users } from "lucide-react";
+import { Users2, UserPlus, LogOut, Loader2, Crown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
-const GroupDetailsDialog = ({ isOpen, onClose, group }) => (
-  <Dialog open={isOpen} onOpenChange={onClose}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          Group Details
-          <Users className="h-5 w-5 text-primary" />
-        </DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <div>
-          <p className="font-semibold">Name:</p>
-          <p>{group?.name}</p>
-        </div>
-        <div>
-          <p className="font-semibold">Description:</p>
-          <p>{group?.description}</p>
-        </div>
-        <div>
-          <p className="font-semibold">Members ({group?.members.length}):</p>
-          <ScrollArea className="h-[200px] w-full border rounded-md p-4">
-            <ul className="space-y-2">
-              {group?.members.map((member) => (
-                <li key={member.id}>@{member.username}</li>
-              ))}
-            </ul>
-          </ScrollArea>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
-);
+const GROUP_GRADIENTS = [
+  "from-violet-500 to-indigo-600",
+  "from-blue-500 to-cyan-500",
+  "from-rose-500 to-pink-600",
+  "from-amber-500 to-orange-600",
+  "from-teal-500 to-emerald-500",
+  "from-fuchsia-500 to-purple-600",
+];
 
-const GroupActionButton = ({ group, onJoin, onQuit }) => {
-  const [isLoading, setIsLoading] = useState(false);
+function getGroupGradient(id) {
+  const idx = id ? parseInt(String(id).replace(/\D/g, "").slice(0, 4) || "0") % GROUP_GRADIENTS.length : 0;
+  return GROUP_GRADIENTS[idx];
+}
 
-  const handleAction = async () => {
-    setIsLoading(true);
+function getInitials(name) {
+  if (!name) return "G";
+  return name.slice(0, 2).toUpperCase();
+}
+
+function GroupCard({ group, onJoin, onQuit }) {
+  const [loading, setLoading] = useState(false);
+  const gradient = getGroupGradient(group.id);
+
+  const handleAction = async (action) => {
+    setLoading(true);
     try {
-      await (group.isMember ? onQuit(group) : onJoin(group));
+      await action(group);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  return !group.isMember ? (
-    <Button size="sm" onClick={handleAction} disabled={isLoading}>
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <PlusCircle className="h-4 w-4 mr-2" />
-      )}
-      Join
-    </Button>
-  ) : (
-    <Button
-      variant="destructive"
-      size="sm"
-      onClick={handleAction}
-      disabled={isLoading}
-    >
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <LogOut className="h-4 w-4 mr-2" />
-      )}
-      Quit
-    </Button>
-  );
-};
+  return (
+    <div className="glass rounded-2xl overflow-hidden hover:scale-[1.02] transition-all duration-200 hover:shadow-2xl hover:shadow-primary/10">
+      <div className={`h-20 bg-gradient-to-r ${gradient} relative flex items-center justify-center`}>
+        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_50%_50%,_white_0%,_transparent_70%)]" />
+        <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white font-bold text-xl">
+          {getInitials(group.name)}
+        </div>
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <h3 className="font-semibold truncate">{group.name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+            {group.description || "No description available."}
+          </p>
+        </div>
 
-export const GroupsTable = ({ groups, onJoin, onQuit }) => {
-  const [selectedGroup, setSelectedGroup] = useState(null);
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs gap-1">
+            <Users2 className="h-3 w-3" />
+            {group.memberCount ?? "?"} members
+          </Badge>
+          {group.isMember && (
+            <Badge className="text-xs bg-green-500/10 text-green-500 border-green-500/20 border">
+              <Crown className="h-3 w-3 mr-1" /> Member
+            </Badge>
+          )}
+        </div>
+
+        {group.isMember ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
+            onClick={() => handleAction(onQuit)}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <LogOut className="h-4 w-4 mr-1" />}
+            Leave Group
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={() => handleAction(onJoin)}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <UserPlus className="h-4 w-4 mr-1" />}
+            Join Group
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function GroupsTable({ groups, onJoin, onQuit }) {
+  if (!groups?.length) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
+        <Users2 className="h-12 w-12 opacity-20" />
+        <p>No groups found.</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <ScrollArea className="h-[400px] rounded-md border p-4">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groups?.map((group) => (
-              <TableRow key={group.id}>
-                <TableCell>{group.name}</TableCell>
-                <TableCell>{group.description}</TableCell>
-                <TableCell>{group.members.length}</TableCell>
-                <TableCell className="text-right">
-                  <div className="space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedGroup(group)}
-                    >
-                      <InfoIcon className="h-4 w-4 mr-2" />
-                      Details
-                    </Button>
-                    <GroupActionButton
-                      group={group}
-                      onJoin={onJoin}
-                      onQuit={onQuit}
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollArea>
-      <GroupDetailsDialog
-        isOpen={!!selectedGroup}
-        onClose={() => setSelectedGroup(null)}
-        group={selectedGroup}
-      />
-    </>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {groups.map((group) => (
+        <GroupCard key={group.id} group={group} onJoin={onJoin} onQuit={onQuit} />
+      ))}
+    </div>
   );
-};
+}
